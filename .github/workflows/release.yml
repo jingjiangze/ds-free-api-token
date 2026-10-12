@@ -226,6 +226,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
+          shopt -s nullglob
           sha256sum *.tar.gz *.zip > ../SHA256SUMS
           mv ../SHA256SUMS .
 
