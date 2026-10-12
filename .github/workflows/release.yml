@@ -1,0 +1,243 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.5.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify version matches Cargo.toml, ds_core and web/package.json
+        run: |
+          CARGO_VERSION=$(grep '^version =' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          CORE_VERSION=$(grep '^version =' ds_core/Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          WEB_VERSION=$(grep '"version"' web/package.json | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          TAG="${{ steps.meta.outputs.tag }}"
+          TAG_VERSION="${TAG#v}"
+          status=0
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "✗ Cargo.toml version=$CARGO_VERSION 与 tag=$TAG_VERSION 不一致"
+            status=1
+          fi
+          if [ "$CORE_VERSION" != "$TAG_VERSION" ]; then
+            echo "✗ ds_core/Cargo.toml version=$CORE_VERSION 与 tag=$TAG_VERSION 不一致"
+            status=1
+          fi
+          if [ "$WEB_VERSION" != "$TAG_VERSION" ]; then
+            echo "✗ web/package.json version=$WEB_VERSION 与 tag=$TAG_VERSION 不一致"
+            status=1
+          fi
+          # CHANGELOG 必须存在对应条目，否则 release notes 会为空
+          if ! grep -q "^## \[$TAG_VERSION\]" CHANGELOG.md; then
+            echo "✗ CHANGELOG.md 缺少 [$TAG_VERSION] 条目"
+            status=1
+          fi
+          exit $status
+
+  # ── 发布门禁 2：在打标签的提交上跑全量测试 ─────────────────────────
+  #
+  # 必须先拿到 web-dist：`rust_embed` 的 `#[folder = "web/dist/"]` 在目录缺失时
+  # 会静默生成一个空的嵌入资源（`WebAssets::get` 直接不存在），
+  # 于是发布二进制会丢失整个管理面板。因此这里显式下载前端产物后再编译。
+  test:
+    needs: [verify, build-frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download frontend assets
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist/
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libclang-dev
+      - name: Verify the admin panel is actually embedded
+        run: |
+          test -f web/dist/index.html || {
+            echo "✗ web/dist/index.html 缺失，发布二进制将不含管理面板"
+            exit 1
+          }
+      - name: Run full test suite against the tagged commit
+        run: cargo test --workspace --all-targets
+
+  build-frontend:
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: web/.bun-version
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: web
+      - name: Build frontend
+        run: bun run build
+        working-directory: web
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist/
+          if-no-files-found: error
+  build-linux-musl:
+    needs: [build-frontend, test]
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            suffix: linux-x86_64-musl
+            package: x86_64-linux-musl-cross
+            apt_packages: ""
+            custom_env:
+              CC: x86_64-linux-musl-gcc
+              CXX: x86_64-linux-musl-g++
+              CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: x86_64-linux-musl-g++
+              RUSTC_LINKER: x86_64-linux-musl-g++
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Download frontend assets
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: web/dist/
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+          cache-key: ${{ matrix.target }}
+      - name: Install base dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake perl pkg-config libclang-dev musl-tools
+      - name: Install target-specific APT dependencies
+        if: ${{ matrix.apt_packages != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt_packages }}
+      - name: Install musl cross-compiler
+        run: |
+          wget https://github.com/musl-cc/musl.cc/releases/latest/download/${{ matrix.package }}.tgz
+          tar xzf ${{ matrix.package }}.tgz -C /opt
+          echo "/opt/${{ matrix.package }}/bin/" >> "$GITHUB_PATH"
+      - name: Build
+        env: ${{ matrix.custom_env }}
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        run: |
+          name="ds-free-api-${{ steps.meta.outputs.tag }}-${{ matrix.suffix }}"
+          mkdir -p "$name"
+          cp "target/${{ matrix.target }}/release/ds-free-api" "$name/"
+          cp LICENSE README.md README.en.md config.example.toml "$name/"
+          tar czf "$name.tar.gz" "$name"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.suffix }}
+          path: "*.tar.gz"
+          if-no-files-found: error
+
+  release:
+    needs: [verify, test, build-linux-musl]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract changelog
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${TAG#v}"
+          awk "/## \[$VERSION\]/{flag=1;next}/## \[/{flag=0}flag" CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "No changelog entry found for $VERSION"
+            exit 1
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          # 只取平台产物。不要下载全部 artifact：docker 任务的 BuildKit GHA 缓存
+          # 会以 `NIyueeE~ds-free-api~<hash>.dockerbuild` 形式出现在同一次运行的
+          # artifact 列表里，全量下载会让下面的 flatten 步骤因为「用文件覆盖目录」而失败。
+          pattern: "{linux-*,macos-*,windows-*}"
+
+      - name: Flatten structure
+        run: |
+          find dist -mindepth 2 -type f -exec mv -t dist/ {} +
+          find dist -mindepth 1 -type d -empty -delete
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.zip > ../SHA256SUMS
+          mv ../SHA256SUMS .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          # 显式指定 tag：workflow_dispatch 触发时 github.ref_name 是分支名，不是 tag
+          tag_name: ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ contains(steps.meta.outputs.tag, '-pre') }}
+          files: dist/*
+          generate_release_notes: false
+          body_path: release_notes.md
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
