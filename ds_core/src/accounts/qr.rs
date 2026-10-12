@@ -37,7 +37,7 @@
 
 use std::time::{Duration, Instant};
 
-use log::{debug, warn};
+use log::debug;
 
 use super::client::ClientError;
 
@@ -174,15 +174,19 @@ impl WeChatQrClient {
         let mut h = wreq::header::HeaderMap::new();
         let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
                   (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+        // from_str 会失败（UA 含任意字符）→ 走 Result；from_static 只接受
+        // 编译期常量字面量，不会失败，直接返回 HeaderValue（不是 Result）。
         if let Ok(v) = wreq::header::HeaderValue::from_str(ua) {
             h.insert(wreq::header::USER_AGENT, v);
         }
-        if let Ok(v) = wreq::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8") {
-            h.insert(wreq::header::ACCEPT_LANGUAGE, v);
-        }
-        if let Ok(v) = wreq::header::HeaderValue::from_static("https://open.weixin.qq.com/") {
-            h.insert(wreq::header::REFERER, v);
-        }
+        h.insert(
+            wreq::header::ACCEPT_LANGUAGE,
+            wreq::header::HeaderValue::from_static("zh-CN,zh;q=0.9,en;q=0.8"),
+        );
+        h.insert(
+            wreq::header::REFERER,
+            wreq::header::HeaderValue::from_static("https://open.weixin.qq.com/"),
+        );
         h
     }
 
@@ -433,15 +437,18 @@ impl WeChatQrClient {
     async fn get_token(&self, nonce: &str, provider: &str) -> Result<String, QrError> {
         let url = format!("{}/oauth/get_token", self.auth_base);
         let mut headers = Self::browser_headers();
-        if let Ok(v) = wreq::header::HeaderValue::from_static("application/json") {
-            headers.insert(wreq::header::CONTENT_TYPE, v);
-        }
-        if let Ok(v) = wreq::header::HeaderValue::from_static("application/json") {
-            headers.insert(wreq::header::ACCEPT, v);
-        }
-        if let Ok(v) = wreq::header::HeaderValue::from_static("https://chat.deepseek.com") {
-            headers.insert(wreq::header::ORIGIN, v);
-        }
+        headers.insert(
+            wreq::header::CONTENT_TYPE,
+            wreq::header::HeaderValue::from_static("application/json"),
+        );
+        headers.insert(
+            wreq::header::ACCEPT,
+            wreq::header::HeaderValue::from_static("application/json"),
+        );
+        headers.insert(
+            wreq::header::ORIGIN,
+            wreq::header::HeaderValue::from_static("https://chat.deepseek.com"),
+        );
 
         let body = serde_json::json!({ "nonce": nonce, "provider": provider });
         let resp = self
