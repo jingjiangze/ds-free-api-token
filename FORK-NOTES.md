@@ -1,4 +1,4 @@
-# ds-free-api-token（私有构建，非上游官方发行）
+# ds-free-api-token（独立构建，非上游官方发行）
 
 基于上游 [NIyueeE/ds-free-api](https://github.com/NIyueeE/ds-free-api) **v0.5.1**（GPL-3.0，随源码保留 LICENSE）
 ＋一个本地补丁，用于自有网关的「**浏览器链接登录**」账号方式（不经密码登录）。

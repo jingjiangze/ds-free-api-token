@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.5.2] - 2026-10-12
 
-> 私有构建（基于上游 v0.5.1 + 浏览器链接登录补丁；供自有网关使用，非上游官方发行）。
+> 独立构建（基于上游 v0.5.1 + 浏览器链接登录补丁；供自有网关使用，非上游官方发行）。
 
 ### Added
 
