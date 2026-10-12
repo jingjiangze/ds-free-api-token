@@ -221,8 +221,15 @@ export function ConfigPage() {
     }
     setLinking(true);
     try {
-      await apiLinkAccount({ token, device_id: deviceId, user_agent: ua, email, mobile });
-      setMessage({ type: 'ok', text: t('config.accounts.link.submitOk') });
+      const res = await apiLinkAccount({ token, device_id: deviceId, user_agent: ua, email, mobile });
+      if (res.state === 'idle') {
+        setMessage({ type: 'ok', text: t('config.accounts.link.submitOk') });
+      } else {
+        setMessage({
+          type: 'err',
+          text: t('config.accounts.link.submitNotAdded', { state: res.state ?? '—' }),
+        });
+      }
       setLinkPaste('');
       setLinkEmail('');
       setShowLinkPanel(false);

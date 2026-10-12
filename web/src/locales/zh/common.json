@@ -115,6 +115,7 @@
         "emailPlaceholder": "邮箱 / 手机号（自动识别失败时手工填写）",
         "submit": "提交链接",
         "submitOk": "已提交，账号正在验证（状态见下方列表）",
+        "submitNotAdded": "链接已保存，但账号未通过验证（状态：{{state}}）。token 可能已失效——请在浏览器重新登录后再链接一次。",
         "parseFailed": "粘贴内容不是有效 JSON",
         "tokenMissing": "未找到会话令牌（token）",
         "identityMissing": "无法识别账号邮箱/手机号，请手工填写"

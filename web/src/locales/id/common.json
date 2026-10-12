@@ -115,6 +115,7 @@
         "emailPlaceholder": "Email / ponsel (isi manual jika deteksi otomatis gagal)",
         "submit": "Kirim tautan",
         "submitOk": "Terkirim. Akun sedang diverifikasi (lihat daftar di bawah)",
+        "submitNotAdded": "Tautan tersimpan, tetapi akun gagal diverifikasi (status: {{state}}). Token mungkin kedaluwarsa — silakan login ulang di browser lalu tautkan lagi.",
         "parseFailed": "Konten yang ditempel bukan JSON yang valid",
         "tokenMissing": "Token sesi tidak ditemukan",
         "identityMissing": "Email/ponsel akun tidak terdeteksi — silakan isi manual"

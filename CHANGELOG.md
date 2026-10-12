@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-12
+
+### Fixed
+
+- 浏览器链接结果回传：`/admin/api/accounts/link` 现返回账号入池状态（`state`）；
+  面板在令牌无效/过期导致未入池时明确提示（此前为静默失败）。
+
 ## [0.5.3] - 2026-10-12
 
 > 独立构建：管理面板「浏览器登录」会话（配合 linked-tokens.json 的账号链接流程）。

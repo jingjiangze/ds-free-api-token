@@ -115,6 +115,7 @@
         "emailPlaceholder": "Email / mobile (fill manually if auto-detect fails)",
         "submit": "Submit link",
         "submitOk": "Submitted. The account is being verified (see the list below)",
+        "submitNotAdded": "Link saved, but the account failed verification (state: {{state}}). The token may have expired — log in again in the browser and re-link.",
         "parseFailed": "Pasted content is not valid JSON",
         "tokenMissing": "Session token not found",
         "identityMissing": "Could not detect account email/mobile — please fill it manually"

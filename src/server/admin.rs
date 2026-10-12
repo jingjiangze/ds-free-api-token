@@ -547,12 +547,27 @@ pub(crate) async fn admin_link_account(
         .adapter
         .sync_accounts(&new_config.ds_core.accounts)
         .await;
+    // 初始化结果：入池成功=idle；失败（令牌无效/过期）则不会入池 → state=None
+    let state_now = state
+        .adapter
+        .account_statuses()
+        .into_iter()
+        .find(|a| {
+            let k = if a.email.is_empty() {
+                a.mobile.as_str()
+            } else {
+                a.email.as_str()
+            };
+            k == key.as_str()
+        })
+        .map(|a| a.state);
     log::info!(
         target: "http::server",
-        "浏览器链接账号已提交: {key}（device_id 提供: {}）",
-        !req.device_id.trim().is_empty()
+        "浏览器链接账号已提交: {key}（device_id 提供: {}，池状态: {:?}）",
+        !req.device_id.trim().is_empty(),
+        state_now
     );
-    json_response(&serde_json::json!({"ok": true, "account": key}))
+    json_response(&serde_json::json!({"ok": true, "account": key, "state": state_now}))
 }
 
 #[derive(Deserialize)]
