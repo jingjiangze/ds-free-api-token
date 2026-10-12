@@ -120,12 +120,12 @@
         <h2>抓取结果</h2>
         <dl class="kv" id="kv"></dl>
         <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
-          <button class="btn primary" id="btn-submit">提交到网关</button>
+          <button class="btn primary" id="btn-submit">自动授权中…</button>
           <button class="btn" id="btn-copy">复制 JSON</button>
           <button class="btn" id="btn-again">重新抓取</button>
         </div>
         <div class="hint" id="submit-hint">
-          提交后账号会进入账号池并自动验证；结果可在管理面板「账号」列表查看。
+          检测到面板登录态时会<b>自动提交</b>，无需任何点击；账号随即进入账号池并自动验证，结果可在管理面板「账号」列表查看。
         </div>
         <pre id="raw" class="hidden"></pre>
       </div>
@@ -229,6 +229,8 @@
     } else {
       hideBanner();
       render(payload);
+      // 自动授权：无需再点「提交到网关」。无登录态时只提示，按钮仍可手动点。
+      tryAutoSubmit(payload);
     }
   }
 
@@ -238,9 +240,57 @@
     banner('请回到已登录的 DeepSeek 标签页，再点一次书签「抓取 DS 会话」。', 'ok');
   });
 
+  // 管理面板登录态的 storage 键：面板用 api.ts 的 TOKEN_KEY（'ds-admin-token'）。
+  // 历史版本本页读的是 'dsgw_admin_token'，两者都试，保证旧面板跳转过来也能用。
+  function readAdminToken() {
+    try {
+      return localStorage.getItem('ds-admin-token') || localStorage.getItem('dsgw_admin_token') || '';
+    } catch (e) { return ''; }
+  }
+
+  // 提交抓取结果（自动 + 手动共用）。返回 Promise，便于串「状态提示」。
+  function submitPayload(raw, btn) {
+    var p = JSON.parse(raw);
+    var token = readAdminToken();
+    if (!token) {
+      banner('未检测到管理面板登录态。请先在管理面板（同域 /admin）登录，再回到本页；或点「复制 JSON」回面板粘贴提交。', 'err');
+      return Promise.resolve(false);
+    }
+    var u = p.user || {};
+    var body = {
+      token: p.token,
+      device_id: p.device_id || '',
+      user_agent: p.user_agent || '',
+      email: u.email || '',
+      mobile: u.mobile || u.mobile_number || '',
+      area_code: u.area_code || ''
+    };
+    if (btn) { btn.disabled = true; btn.textContent = '提交中…'; }
+    return fetch('/admin/api/accounts/link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (res) {
+        if (res.status === 200 && res.body && res.body.ok) {
+          banner('✅ 已自动授权：账号正在验证（状态：' + (res.body.state || '—') + '）。可以关闭本页，回管理面板账号列表查看。', 'ok');
+          return true;
+        }
+        banner('提交失败（HTTP ' + res.status + '）：' + ((res.body && res.body.error) || JSON.stringify(res.body)), 'err');
+        return false;
+      })
+      .catch(function (e) {
+        banner('提交请求失败：' + e, 'err');
+        return false;
+      })
+      .finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '重新提交'; }
+      });
+  }
+
   document.getElementById('btn-copy').addEventListener('click', function () {
     var raw = document.getElementById('btn-submit').dataset.payload || '';
-    var done = function () { banner('JSON 已复制，可回到管理面板「账号」区粘贴提交。', 'ok'); };
+    var done = function () { banner('JSON 已复制，可回到管理面板「账号」区粘贴提交（兜底路径）。', 'ok'); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(raw).then(done, function () { fallbackCopy(raw); done(); });
     } else { fallbackCopy(raw); done(); }
@@ -257,50 +307,28 @@
   document.getElementById('btn-submit').addEventListener('click', function () {
     var raw = this.dataset.payload;
     if (!raw) return;
-    var p = JSON.parse(raw);
-    var token = localStorage.getItem('dsgw_admin_token') || '';
-    if (!token) {
-      banner('未检测到管理面板登录态。请先在「管理面板」登录，再回到本页提交（或改用「复制 JSON」回面板粘贴）。', 'err');
-      return;
-    }
-    var u = p.user || {};
-    var body = {
-      token: p.token,
-      device_id: p.device_id || '',
-      user_agent: p.user_agent || '',
-      email: u.email || '',
-      mobile: u.mobile || u.mobile_number || '',
-      area_code: u.area_code || ''
-    };
-    this.disabled = true;
-    this.textContent = '提交中…';
-    fetch('/admin/api/accounts/link', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-      body: JSON.stringify(body)
-    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
-      .then(function (res) {
-        var btn = document.getElementById('btn-submit');
-        btn.disabled = false; btn.textContent = '提交到网关';
-        if (res.status === 200 && res.body && res.body.ok) {
-          banner('已提交，账号正在验证（状态：' + (res.body.state || '—') + '）。可在管理面板账号列表查看。', 'ok');
-        } else {
-          banner('提交失败（HTTP ' + res.status + '）：' + ((res.body && res.body.error) || JSON.stringify(res.body)), 'err');
-        }
-      })
-      .catch(function (e) {
-        var btn = document.getElementById('btn-submit');
-        btn.disabled = false; btn.textContent = '提交到网关';
-        banner('提交请求失败：' + e, 'err');
-      });
+    submitPayload(raw, this);
   });
 
-  // 面板登录态由前端在跳转前写入同源 localStorage 的 dsgw_admin_token（见 ConfigPage）
+  // 自动授权：抓到 payload 且本域已有面板登录态时，无需任何点击直接提交。
+  var autoTried = false;
+  function tryAutoSubmit(p) {
+    if (autoTried) return;
+    autoTried = true;
+    var token = readAdminToken();
+    if (!token) {
+      banner('抓取成功。本页未检测到面板登录态——点「提交到网关」前请先在同域 /admin 登录；或点「复制 JSON」回面板粘贴。', 'ok');
+      return;
+    }
+    submitPayload(document.getElementById('btn-submit').dataset.payload, null);
+  }
+
+  // 面板登录态与抓取页同源（同域同端口），localStorage 共享，键名 'ds-admin-token'
   var openDs = document.getElementById('open-ds');
   openDs.addEventListener('click', function () {
-    var t = null;
-    try { t = localStorage.getItem('dsgw_admin_token'); } catch (e) {}
-    if (!t) banner('提示：本页「提交到网关」需要先在管理面板登录。若只想复制 JSON 给面板粘贴，可忽略本提示。', 'ok');
+    if (!readAdminToken()) {
+      banner('提示：本页「提交到网关」需要先在管理面板登录。若只想复制 JSON 给面板粘贴，可忽略本提示。', 'ok');
+    }
   });
 })();
 </script>

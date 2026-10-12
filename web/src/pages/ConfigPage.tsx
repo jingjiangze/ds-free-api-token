@@ -177,9 +177,21 @@ export function ConfigPage() {
   /** 浏览器登录：解析粘贴的提取结果 → 提交链接 */
   const handleLinkSubmit = async () => {
     setMessage(null);
+    // 兜底输入框既收 JSON，也收抓取页地址（#d=... 形式）：
+    // 用户从地址栏复制过来的就是 URL，直接 JSON.parse 会报「不是有效 JSON」。
+    let text = linkPaste.trim();
+    const hashIdx = text.indexOf('#d=');
+    if (hashIdx >= 0) {
+      try {
+        text = decodeURIComponent(text.slice(hashIdx + 3));
+      } catch {
+        setMessage({ type: 'err', text: t('config.accounts.link.parseFailed') });
+        return;
+      }
+    }
     let parsed: Record<string, unknown>;
     try {
-      parsed = JSON.parse(linkPaste) as Record<string, unknown>;
+      parsed = JSON.parse(text) as Record<string, unknown>;
     } catch {
       setMessage({ type: 'err', text: t('config.accounts.link.parseFailed') });
       return;
@@ -380,10 +392,12 @@ export function ConfigPage() {
                     variant="outline"
                     className="h-7 gap-1.5 text-[11px]"
                     onClick={() => {
-                      // 面板登录态透传到抓取页：抓取页同源，可直接用这个 token 提交
+                      // 面板登录态与抓取页同源，localStorage 共享。
+                      // 键名必须与 api.ts 的 TOKEN_KEY 一致（'ds-admin-token'）——
+                      // 抓取页读的就是这个键；写错键会让抓取页误报「未检测到登录态」。
                       try {
                         const tk = getToken();
-                        if (tk) localStorage.setItem('dsgw_admin_token', tk);
+                        if (tk) localStorage.setItem('ds-admin-token', tk);
                       } catch {
                         /* 隐私模式下写入失败不影响复制流程 */
                       }
