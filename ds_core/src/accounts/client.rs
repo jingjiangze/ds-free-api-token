@@ -337,7 +337,7 @@ impl EmulationProfile {
         }
     }
 
-    const fn to_wreq(self) -> Emulation {
+    pub(crate) const fn to_wreq(self) -> Emulation {
         match self {
             Self::OkHttp4_12 => Emulation::OkHttp4_12,
             Self::Chrome136 => Emulation::Chrome136,

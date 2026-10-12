@@ -126,8 +126,9 @@ impl QrSession {
         QR_TTL.as_secs().saturating_sub(elapsed.as_secs())
     }
 
+    /// 二维码是否已过期（调用了非 const 的 `ttl_secs`，因此本身不能是 const）
     #[must_use]
-    pub const fn is_expired(&self) -> bool {
+    pub fn is_expired(&self) -> bool {
         self.ttl_secs() == 0
     }
 }
