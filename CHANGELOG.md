@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-10-13
+
+### Added
+- 微信扫码授权（`/admin/api/accounts/qr/start|poll|cancel`）：面板出二维码，微信扫一下即完成账号接入，**彻底去掉「拖按钮到书签栏」这一步**——零安装、零拖拽、零 F12。
+- `ds_core::qr` 模块：扫码链路的纯服务端实现（取码 → 轮询 → OAuth callback → 换 token），复用既有 `wreq` 客户端，未引入新的外部依赖。
+- 扫码成功后复用浏览器书签同一条落库通道（`linked-tokens.json` + 账号热重载），不新增第二套账号存储。
+
+### Changed
+- 「浏览器登录」面板调整：微信扫码升为首选路径；书签降级为扫码不可用时的兜底，并新增「复制书签链接」按钮供触屏 / 无法拖拽的场景使用。
+- 三语文案（zh / en / id）同步扩展，键集 270 项保持 parity。
+
+### Fixed
+- 修正 `#d=` 粘贴兜底框只能解析纯 JSON 的问题：现在同时接受抓取页地址与 JSON。
+- 修正 `ds-capture` 读取面板登录态时 storage 键不匹配（`dsgw_admin_token` vs `ds-admin-token`）导致自动授权失效的问题。
+
+### Notes
+- 微信扫码要求该微信**已绑定** DeepSeek 账号，否则会被重定向到手机绑定页而无法完成（服务端返回「未绑定」提示，此时请改用书签路径）。
+- 扫码换取的 token 用于 `chat.deepseek.com` 的对话接口，这一点社区开源实现均未覆盖，上线后需以真实对话验证。
+
 ## [0.5.6] - 2026-10-13
 
 ### Fixed

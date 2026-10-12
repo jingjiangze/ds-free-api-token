@@ -371,6 +371,43 @@ export async function apiLinkAccount(
   );
 }
 
+// ── WeChat QR login (免书签 / 免 F12) ────────────────────────────────────
+
+/** 前端可见的扫码状态（与后端 QrStatusView 的 snake_case 一致） */
+export type QrStatus = 'waiting' | 'scanned' | 'done' | 'expired' | 'failed';
+
+export interface QrStartResult {
+  id: string;
+  /** 二维码 PNG 的 base64（前端拼 `data:image/png;base64,` 使用） */
+  png_base64: string;
+  ttl: number;
+}
+
+export interface QrPollResult {
+  status: QrStatus;
+  ttl: number;
+  message?: string | null;
+  account?: string | null;
+}
+
+/** 开始一次微信扫码会话，返回二维码图片 */
+export async function apiQrStart(): Promise<QrStartResult> {
+  return apiFetch<QrStartResult>('/admin/api/accounts/qr/start', { method: 'POST' });
+}
+
+/** 轮询一次扫码状态 */
+export async function apiQrPoll(id: string): Promise<QrPollResult> {
+  return apiFetch<QrPollResult>(`/admin/api/accounts/qr/poll?id=${encodeURIComponent(id)}`);
+}
+
+/** 取消扫码会话 */
+export async function apiQrCancel(id: string): Promise<{ ok: boolean }> {
+  return apiFetch<{ ok: boolean }>(
+    `/admin/api/accounts/qr/cancel?id=${encodeURIComponent(id)}`,
+    { method: 'POST' }
+  );
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────
 
 export async function apiFetchLogs(limit?: number): Promise<RequestLog[]> {

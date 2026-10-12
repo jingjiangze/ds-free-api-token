@@ -6,6 +6,7 @@ mod client;
 mod hif;
 pub(crate) mod pool;
 mod pow;
+pub mod qr;
 
 use std::sync::Arc;
 

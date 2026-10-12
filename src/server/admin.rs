@@ -632,7 +632,7 @@ pub(crate) async fn admin_runtime_logs(Query(query): Query<RuntimeLogsQuery>) ->
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-fn json_response<T: Serialize>(data: &T) -> Response {
+pub(crate) fn json_response<T: Serialize>(data: &T) -> Response {
     let bytes = serde_json::to_vec(data).unwrap();
     Response::builder()
         .status(StatusCode::OK)
@@ -641,7 +641,7 @@ fn json_response<T: Serialize>(data: &T) -> Response {
         .unwrap()
 }
 
-fn error_response(status: StatusCode, message: &str) -> Response {
+pub(crate) fn error_response(status: StatusCode, message: &str) -> Response {
     let body = serde_json::json!({"error": message});
     let bytes = serde_json::to_vec(&body).unwrap();
     Response::builder()

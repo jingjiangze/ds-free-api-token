@@ -172,6 +172,8 @@ pub(crate) struct AppState {
     pub(crate) config_path: PathBuf,
     /// `Idempotency-Key` 缓存（进程内，有界 + TTL）
     pub(crate) idempotency: Arc<IdempotencyStore>,
+    /// 微信扫码会话表（进程内，有界 + TTL）。`None` = 未启用（单测桩）。
+    pub(crate) qr_registry: Option<Arc<super::qr::QrRegistry>>,
 }
 struct RequestRecord<'a> {
     request_id: &'a str,

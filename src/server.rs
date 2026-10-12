@@ -7,6 +7,7 @@ mod auth;
 mod error;
 mod handlers;
 mod idempotency;
+pub mod qr;
 pub mod runtime_log;
 mod stats;
 mod store;
@@ -84,6 +85,7 @@ pub async fn run(config: Config, config_path: PathBuf) -> anyhow::Result<()> {
         store: store.clone(),
         login_limiter: login_limiter.clone(),
         idempotency: Arc::new(idempotency::IdempotencyStore::new()),
+        qr_registry: Some(qr::QrRegistry::new()),
     };
     let router = build_router(state.clone(), &cors_origins);
 
@@ -164,6 +166,10 @@ fn build_router(state: AppState, cors_origins: &[String]) -> Router {
         .route("/admin/api/config", put(admin::admin_put_config))
         // Browser-linked account (token store + hot add)
         .route("/admin/api/accounts/link", post(admin::admin_link_account))
+        // WeChat QR login (免书签 / 免 F12)
+        .route("/admin/api/accounts/qr/start", post(qr::admin_qr_start))
+        .route("/admin/api/accounts/qr/poll", get(qr::admin_qr_poll))
+        .route("/admin/api/accounts/qr/cancel", post(qr::admin_qr_cancel))
         // Request logs
         .route("/admin/api/logs", get(admin::admin_logs))
         // Runtime logs
