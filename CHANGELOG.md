@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-10-12
+
+> 浏览器登录免 F12：抓取从「F12 控制台粘贴脚本」改为「书签一次点击，自动跳回本域」。
+
+### Added
+
+- **GET /ds-capture**（public，无 JWT）：浏览器登录抓取页。从 DeepSeek 页面跳回本域时
+  hash 携带 `{token, device_id, user_agent, user}`，页面展示摘要并提供
+  「提交到网关」（同源直连 `/admin/api/accounts/link`）与「复制 JSON」（回面板粘贴兜底）两个出口。
+- **书签脚本（bookmarklet）**：抓取页给出「抓取 DS 会话」可拖拽书签项；在已登录的
+  chat.deepseek.com 页面点击即读 `localStorage.userToken`、`window.SMSdk.getDeviceId()`
+  与 `navigator.userAgent`，编码进 hash 跳回 `/ds-capture`。书签只需添加一次。
+
+### Changed
+
+- 管理面板「浏览器登录」面板：步骤 ② 由「复制提取脚本」改为「打开会话抓取页 + 拖书签」，
+  并在打开抓取页时把面板 JWT 透写到同源 `localStorage.dsgw_admin_token`（供抓取页一键提交）。
+
 ## [0.5.4] - 2026-10-12
 
 ### Fixed

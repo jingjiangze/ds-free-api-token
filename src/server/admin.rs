@@ -570,6 +570,24 @@ pub(crate) async fn admin_link_account(
     json_response(&serde_json::json!({"ok": true, "account": key, "state": state_now}))
 }
 
+/// GET /ds-capture —— 浏览器登录抓取页（免 F12）
+///
+/// 静态页：用户从 DeepSeek 页面点书签跳回本域，hash 里带抓取到的
+/// `{token, device_id, user_agent, user}`。本页负责展示 + 一键提交
+/// （同源直连 `POST /admin/api/accounts/link`，JWT 由面板登录态提供）。
+///
+/// 无 JWT 依赖：页面对未登录访问者也可见（只有「提交」需要 token），
+/// 且不含任何服务端状态。
+pub(crate) async fn ds_capture_page() -> Response {
+    let html = include_str!("../../web/public/ds-capture.html");
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(html))
+        .unwrap()
+}
+
 #[derive(Deserialize)]
 pub struct LogsQuery {
     #[serde(default = "default_limit")]

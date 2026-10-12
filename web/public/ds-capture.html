@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeepSeek 会话抓取 · dsweb-gateway</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f6f7f9; color: #1a1d21;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #101318; color: #e6e8ec; }
+    .card { background: #171b22; border-color: #262c36; }
+    .muted { color: #8b93a1; }
+    code, pre { background: #0e1218 !important; }
+    .ok { background: #10281c; border-color: #1d4a32; color: #7ee2a8; }
+    .err { background: #2a1414; border-color: #5a2020; color: #ff9b9b; }
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: #6b7280; font-size: 13px; }
+  .card { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px; padding: 16px 18px; margin-top: 16px; }
+  .row { display: flex; gap: 10px; align-items: flex-start; }
+  .step-n { flex: 0 0 24px; height: 24px; border-radius: 50%; background: #2563eb; color: #fff;
+            font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h2 { font-size: 15px; margin: 2px 0 6px; }
+  a.btn, button.btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+    border: 1px solid #d1d5db; background: #fff; color: #1a1d21; cursor: pointer; text-decoration: none;
+  }
+  a.btn:hover, button.btn:hover { background: #f3f4f6; }
+  button.btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  button.btn.primary:hover { background: #1d4ed8; }
+  button.btn:disabled { opacity: .5; cursor: not-allowed; }
+  .bookmarklet {
+    display: inline-block; padding: 8px 14px; border-radius: 7px; background: #2563eb; color: #fff;
+    font-size: 13.5px; font-weight: 500; text-decoration: none; cursor: grab;
+    border: 1px solid #1d4ed8;
+  }
+  .bookmarklet:active { cursor: grabbing; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px; background: #f1f3f5; border-radius: 6px;
+  }
+  pre { padding: 10px 12px; overflow: auto; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 12px; font-size: 13.5px; margin-top: 8px; }
+  .kv dt { color: #6b7280; }
+  .kv dd { margin: 0; word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .banner { border-radius: 8px; padding: 10px 14px; font-size: 13.5px; margin-top: 16px; border: 1px solid; }
+  .banner.ok { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+  .banner.err { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+  .hidden { display: none !important; }
+  .hint { font-size: 12.5px; color: #6b7280; margin-top: 6px; }
+  ol.tight { margin: 8px 0 0; padding-left: 22px; }
+  ol.tight li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>DeepSeek 会话抓取</h1>
+  <div class="muted">dsweb-gateway 管理面板 · 浏览器登录接入</div>
+
+  <!-- ── 状态提示 ───────────────────────────────────────────── -->
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- ── 步骤 1：打开 DeepSeek 登录 ─────────────────────────── -->
+  <div class="card" id="step-open">
+    <div class="row">
+      <div class="step-n">1</div>
+      <div class="step-body">
+        <h2>打开 DeepSeek 并登录</h2>
+        <div class="muted">在新标签页打开登录页，用你要接入的账号正常登录（验证码 / 扫码均可）。</div>
+        <div style="margin-top:10px">
+          <a class="btn" id="open-ds" href="https://chat.deepseek.com/sign_in" target="_blank" rel="noopener">
+            打开 chat.deepseek.com/sign_in ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 步骤 2：书签抓取 ───────────────────────────────────── -->
+  <div class="card">
+    <div class="row">
+      <div class="step-n">2</div>
+      <div class="step-body">
+        <h2>登录后，在 DeepSeek 页面点一下书签「抓取 DS 会话」</h2>
+        <div class="muted">
+          首次使用：把下面这个按钮<strong>拖到浏览器书签栏</strong>（一次性）。之后每次接入只需在 DeepSeek 页面点它，
+          会自动读取会话令牌 / 设备指纹 / 浏览器 UA 并跳回本页。
+        </div>
+        <div style="margin-top:10px">
+          <a class="bookmarklet" id="bm" href="#">抓取 DS 会话</a>
+        </div>
+        <div class="hint">
+          拖不动？部分浏览器需要先显示书签栏（Chrome/Edge: <code>Ctrl+Shift+B</code>）。
+          也可右键该按钮 →「复制链接」，再到 DeepSeek 页面地址栏粘贴并回车。
+        </div>
+        <details style="margin-top:8px">
+          <summary class="muted" style="cursor:pointer">移动端 / 无法使用书签？</summary>
+          <div class="muted" style="margin-top:6px">
+            手机上长按本按钮 →「复制链接」，切到 DeepSeek 标签页，在地址栏粘贴并前往即可。
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 步骤 3：结果 / 提交 ────────────────────────────────── -->
+  <div class="card hidden" id="step-result">
+    <div class="row">
+      <div class="step-n">3</div>
+      <div class="step-body">
+        <h2>抓取结果</h2>
+        <dl class="kv" id="kv"></dl>
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+          <button class="btn primary" id="btn-submit">提交到网关</button>
+          <button class="btn" id="btn-copy">复制 JSON</button>
+          <button class="btn" id="btn-again">重新抓取</button>
+        </div>
+        <div class="hint" id="submit-hint">
+          提交后账号会进入账号池并自动验证；结果可在管理面板「账号」列表查看。
+        </div>
+        <pre id="raw" class="hidden"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var RETURN = location.origin + '/ds-capture';
+  var bm = document.getElementById('bm');
+
+  // 书签脚本：在 DeepSeek 页面上下文里执行（读 localStorage.userToken + SMSdk 设备指纹 + UA），
+  // 完成后把 JSON 编码进 hash 跳回本域抓取页。
+  // 源码用「字符码」拼出反引号，避免模板字面量在本仓源码里留下可被工具截断的字面量。
+  var BT = String.fromCharCode(96); // `
+  var lines = [
+    '(async function(){',
+    '  var t = localStorage.getItem("userToken");',
+    '  if(!t){ alert("未找到会话令牌：请先在 chat.deepseek.com 完成登录"); return; }',
+    '  var d = "";',
+    '  var sm = window.SMSdk;',
+    '  if (sm && sm.ready) {',
+    '    try { await new Promise(function(res){ sm.ready(function(){ res(); }); }); } catch(e){}',
+    '  }',
+    '  if (sm && sm.getDeviceId) {',
+    '    for (var i = 0; i < 40 && !d; i++) {',
+    '      try { d = sm.getDeviceId() || ""; } catch(e){}',
+    '      if (!d) await new Promise(function(r){ setTimeout(r, 250); });',
+    '    }',
+    '  }',
+    '  var u = {};',
+    '  try{',
+    '    var r = await fetch("/api/v0/users/settings", { headers: { authorization: "Bearer " + t } });',
+    '    var j = await r.json(); u = (j && j.data) || {};',
+    '  }catch(e){}',
+    '  var payload = JSON.stringify({ token: t, device_id: d, user_agent: navigator.userAgent, user: u });',
+    '  location.href = ' + BT + RETURN + '/#d=' + BT + ' + encodeURIComponent(payload);',
+    '})();'
+  ];
+  var snippet = lines.join('\n');
+  bm.setAttribute('href', 'javascript:' + encodeURIComponent(snippet));
+
+  function banner(msg, kind) {
+    var el = document.getElementById('banner');
+    el.textContent = msg;
+    el.className = 'banner ' + (kind || 'ok');
+  }
+  function hideBanner() {
+    document.getElementById('banner').className = 'banner hidden';
+  }
+
+  // 从 hash / window.name 解析抓取结果
+  function readPayload() {
+    var raw = null;
+    if (location.hash && location.hash.indexOf('#d=') === 0) {
+      raw = decodeURIComponent(location.hash.slice(3));
+      history.replaceState(null, '', location.pathname + location.search);
+    } else if (window.name && window.name.indexOf('dscap:') === 0) {
+      raw = window.name.slice(6);
+      window.name = '';
+    }
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (e) { return { __parse_error: String(e) }; }
+  }
+
+  function mask(s, keep) {
+    if (!s) return '—';
+    s = String(s);
+    return s.length > keep ? s.slice(0, keep) + '…（' + s.length + ' 字符）' : s;
+  }
+
+  function render(p) {
+    var kv = document.getElementById('kv');
+    kv.innerHTML = '';
+    var u = p.user || {};
+    var rows = [
+      ['账号', u.email || u.mobile || u.mobile_number || '（提交时可手工填写）'],
+      ['令牌', mask(p.token, 10)],
+      ['设备指纹', p.device_id || '—'],
+      ['浏览器 UA', mask(p.user_agent, 46)]
+    ];
+    rows.forEach(function (r) {
+      var dt = document.createElement('dt'); dt.textContent = r[0];
+      var dd = document.createElement('dd'); dd.textContent = r[1] || '—';
+      kv.appendChild(dt); kv.appendChild(dd);
+    });
+    document.getElementById('step-result').classList.remove('hidden');
+    document.getElementById('btn-submit').dataset.payload = JSON.stringify(p);
+    document.getElementById('step-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  var payload = readPayload();
+  if (payload) {
+    if (payload.__parse_error) {
+      banner('抓取内容解析失败：' + payload.__parse_error + '。请重新点书签抓取。', 'err');
+    } else if (!payload.token) {
+      banner('抓取内容里没有会话令牌（未登录？）。请先在 DeepSeek 完成登录再点书签。', 'err');
+    } else {
+      hideBanner();
+      render(payload);
+    }
+  }
+
+  document.getElementById('btn-again').addEventListener('click', function () {
+    document.getElementById('step-result').classList.add('hidden');
+    document.getElementById('open-ds').focus();
+    banner('请回到已登录的 DeepSeek 标签页，再点一次书签「抓取 DS 会话」。', 'ok');
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', function () {
+    var raw = document.getElementById('btn-submit').dataset.payload || '';
+    var done = function () { banner('JSON 已复制，可回到管理面板「账号」区粘贴提交。', 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(raw).then(done, function () { fallbackCopy(raw); done(); });
+    } else { fallbackCopy(raw); done(); }
+  });
+
+  function fallbackCopy(text) {
+    var pre = document.getElementById('raw');
+    pre.textContent = text;
+    pre.classList.remove('hidden');
+    var r = document.createRange(); r.selectNodeContents(pre);
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+
+  document.getElementById('btn-submit').addEventListener('click', function () {
+    var raw = this.dataset.payload;
+    if (!raw) return;
+    var p = JSON.parse(raw);
+    var token = localStorage.getItem('dsgw_admin_token') || '';
+    if (!token) {
+      banner('未检测到管理面板登录态。请先在「管理面板」登录，再回到本页提交（或改用「复制 JSON」回面板粘贴）。', 'err');
+      return;
+    }
+    var u = p.user || {};
+    var body = {
+      token: p.token,
+      device_id: p.device_id || '',
+      user_agent: p.user_agent || '',
+      email: u.email || '',
+      mobile: u.mobile || u.mobile_number || '',
+      area_code: u.area_code || ''
+    };
+    this.disabled = true;
+    this.textContent = '提交中…';
+    fetch('/admin/api/accounts/link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+      .then(function (res) {
+        var btn = document.getElementById('btn-submit');
+        btn.disabled = false; btn.textContent = '提交到网关';
+        if (res.status === 200 && res.body && res.body.ok) {
+          banner('已提交，账号正在验证（状态：' + (res.body.state || '—') + '）。可在管理面板账号列表查看。', 'ok');
+        } else {
+          banner('提交失败（HTTP ' + res.status + '）：' + ((res.body && res.body.error) || JSON.stringify(res.body)), 'err');
+        }
+      })
+      .catch(function (e) {
+        var btn = document.getElementById('btn-submit');
+        btn.disabled = false; btn.textContent = '提交到网关';
+        banner('提交请求失败：' + e, 'err');
+      });
+  });
+
+  // 面板登录态由前端在跳转前写入同源 localStorage 的 dsgw_admin_token（见 ConfigPage）
+  var openDs = document.getElementById('open-ds');
+  openDs.addEventListener('click', function () {
+    var t = null;
+    try { t = localStorage.getItem('dsgw_admin_token'); } catch (e) {}
+    if (!t) banner('提示：本页「提交到网关」需要先在管理面板登录。若只想复制 JSON 给面板粘贴，可忽略本提示。', 'ok');
+  });
+})();
+</script>
+</body>
+</html>

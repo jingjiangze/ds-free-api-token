@@ -113,6 +113,8 @@ fn build_router(state: AppState, cors_origins: &[String]) -> Router {
     let public = Router::new()
         .route("/", get(root))
         .route("/health", get(health))
+        // 浏览器登录抓取页（免 F12）：无 JWT，页面自身不含服务端状态
+        .route("/ds-capture", get(admin::ds_capture_page))
         // Admin auth (no JWT required)
         .route("/admin/api/setup", post(admin::admin_setup))
         .route("/admin/api/login", post(admin::admin_login));

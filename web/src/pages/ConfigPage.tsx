@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { apiFetchConfig, apiSaveConfig, apiLinkAccount, localizeAuthError, type FullConfig } from '@/lib/api';
+import { apiFetchConfig, apiSaveConfig, apiLinkAccount, getToken, localizeAuthError, type FullConfig } from '@/lib/api';
+import { buildCaptureBookmarklet } from '@/lib/ds-bookmarklet';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,14 +36,6 @@ function generateApiKey(): string {
   crypto.getRandomValues(bytes);
   return 'sk-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
-
-/**
- * 浏览器登录「提取脚本」：在已登录 chat.deepseek.com 的页面控制台里执行。
- * 自动读取 userToken / 设备指纹（SMSdk）/ 浏览器 UA / 当前账号信息，
- * JSON 复制到剪贴板（失败则打印在控制台）。
- */
-const LINK_SNIPPET =
-  "(async()=>{const t=localStorage.getItem('userToken');let d=null;for(let i=0;i<40&&!d;i++){try{d=SMSdk.getDeviceId()}catch(e){}if(!d)await new Promise(r=>setTimeout(r,500))}let u={};try{u=await(await fetch('/api/v0/users/current',{headers:{authorization:'Bearer '+t}})).json()}catch(e){}const j=JSON.stringify({token:t,device_id:d,user_agent:navigator.userAgent,user:u});try{await navigator.clipboard.writeText(j)}catch(e){}console.log('DS-LINK JSON:',j)})()";
 
 export function ConfigPage() {
   const { t, i18n } = useTranslation();
@@ -334,6 +327,8 @@ export function ConfigPage() {
                 <Link2 className="h-3.5 w-3.5 text-primary" />
                 <span>{t('config.accounts.link.title')}</span>
               </div>
+
+              {/* ① 打开 DeepSeek 登录 */}
               <div className="space-y-1.5">
                 <div className="text-muted-foreground">{t('config.accounts.link.step1')}</div>
                 <a
@@ -346,26 +341,65 @@ export function ConfigPage() {
                   <span>{t('config.accounts.link.openLogin')}</span>
                 </a>
               </div>
+
+              {/* ② 书签一次点击（免 F12）——直接在面板里给出可拖拽书签 */}
               <div className="space-y-1.5">
                 <div className="text-muted-foreground">{t('config.accounts.link.step2')}</div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1.5 text-[11px]"
-                  onClick={() => {
-                    navigator.clipboard.writeText(LINK_SNIPPET);
-                    setSnippetCopied(true);
-                    setTimeout(() => setSnippetCopied(false), 2000);
-                  }}
-                >
-                  {snippetCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  <span>
-                    {snippetCopied
-                      ? t('config.accounts.link.copied')
-                      : t('config.accounts.link.copySnippet')}
-                  </span>
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a
+                    href={buildCaptureBookmarklet(location.origin + '/ds-capture')}
+                    onClick={(e) => e.preventDefault()}
+                    draggable
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground cursor-grab active:cursor-grabbing no-underline"
+                    title={t('config.accounts.link.dragHint')}
+                  >
+                    <Link2 className="h-3 w-3" />
+                    <span>{t('config.accounts.link.dragBookmark')}</span>
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 text-[11px]"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        buildCaptureBookmarklet(location.origin + '/ds-capture')
+                      );
+                      setSnippetCopied(true);
+                      setTimeout(() => setSnippetCopied(false), 2000);
+                    }}
+                  >
+                    {snippetCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    <span>
+                      {snippetCopied
+                        ? t('config.accounts.link.copied')
+                        : t('config.accounts.link.copyCaptureUrl')}
+                    </span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-[11px]"
+                    onClick={() => {
+                      // 面板登录态透传到抓取页：抓取页同源，可直接用这个 token 提交
+                      try {
+                        const tk = getToken();
+                        if (tk) localStorage.setItem('dsgw_admin_token', tk);
+                      } catch {
+                        /* 隐私模式下写入失败不影响复制流程 */
+                      }
+                      window.open('/ds-capture', '_blank', 'noopener');
+                    }}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    <span>{t('config.accounts.link.openCapture')}</span>
+                  </Button>
+                </div>
+                <div className="text-[11px] text-muted-foreground leading-relaxed">
+                  {t('config.accounts.link.step2Hint')}
+                </div>
               </div>
+
+              {/* ③ 仍保留手工粘贴兜底（抓取页 JSON 复制回面板） */}
               <div className="space-y-1.5">
                 <div className="text-muted-foreground">{t('config.accounts.link.step3')}</div>
                 <textarea
