@@ -116,7 +116,7 @@ pub(crate) async fn admin_qr_start(State(state): State<AppState>) -> Response {
     }
 
     let client = ds_core::WeChatQrClient::new(ds_core::EmulationProfile::Chrome136);
-    let mut session = match client.start().await {
+    let session = match client.start().await {
         Ok(s) => s,
         Err(e) => {
             log::warn!(target: "server::admin", "微信扫码会话创建失败: {e}");
@@ -377,7 +377,7 @@ async fn link_token_into_pool(state: &AppState, token: &str) -> Result<String, S
     );
 
     match pool_state {
-        Some(s) => Ok(mask(&key)),
+        Some(_) => Ok(mask(&key)),
         None => {
             Err("账号已保存但未通过验证：token 可能已失效，请重新扫码或改用书签方式".to_string())
         }
