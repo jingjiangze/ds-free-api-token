@@ -380,7 +380,6 @@ impl WeChatQrClient {
 
     async fn fetch_oauth_params(&self, wx_code: &str) -> Result<(String, String), QrError> {
         let mut url = format!("{}/callback?code={}&state=", self.callback_base, wx_code);
-        let mut location: Option<String> = None;
 
         // 手动跟随（最多 6 跳），避免自动跟随把 nonce 吞掉
         for _ in 0..6 {
@@ -424,14 +423,12 @@ impl WeChatQrClient {
                         return Ok((n, p));
                     }
                     url = absolutize(&self.callback_base, &l);
-                    location = Some(l);
                 }
                 None => {
                     return Err(QrError::Parse("重定向响应缺少 Location 头".into()));
                 }
             }
         }
-        let _ = location;
         Err(QrError::Parse("OAuth callback 重定向次数过多".into()))
     }
 
