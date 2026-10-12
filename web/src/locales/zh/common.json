@@ -98,9 +98,30 @@
       "countLabel": "{{count}} 个账号",
       "accountNumber": "账号 #{{num}}",
       "description": "用于反向代理和 Token 轮转的 DeepSeek Web 账号列表",
-      "empty": "暂无 DeepSeek 账号，点击下方按钮添加账号。",
+      "empty": "暂无 DeepSeek 账号。推荐用上方「浏览器登录」接入，或展开下方「账号密码登录」。",
       "deleteLabel": "删除",
-      "deleteTitle": "删除账号"
+      "deleteTitle": "删除账号", 
+      "link": {
+        "button": "浏览器登录",
+        "hint": "推荐：用浏览器登录一次即可接入，无需输入账号密码",
+        "title": "浏览器登录会话",
+        "step1": "① 打开 DeepSeek 登录页并完成登录（新标签页）",
+        "openLogin": "打开 DeepSeek 登录页",
+        "step2": "② 在该页面按 F12 打开控制台，粘贴「提取脚本」并回车（自动读取令牌 / 设备指纹 / 浏览器 UA 并复制到剪贴板）",
+        "copySnippet": "复制提取脚本",
+        "copied": "已复制",
+        "step3": "③ 回到本页粘贴提取结果（JSON）并提交",
+        "pastePlaceholder": "在此粘贴提取脚本复制的 JSON",
+        "emailPlaceholder": "邮箱 / 手机号（自动识别失败时手工填写）",
+        "submit": "提交链接",
+        "submitOk": "已提交，账号正在验证（状态见下方列表）",
+        "parseFailed": "粘贴内容不是有效 JSON",
+        "tokenMissing": "未找到会话令牌（token）",
+        "identityMissing": "无法识别账号邮箱/手机号，请手工填写"
+      },
+      "manual": {
+        "toggle": "账号密码登录（传统方式，默认收起）"
+      }
     },
     "apiKeys": {
       "description": "描述",

@@ -160,6 +160,8 @@ fn build_router(state: AppState, cors_origins: &[String]) -> Router {
         .route("/admin/api/config", get(admin::admin_config))
         // Config
         .route("/admin/api/config", put(admin::admin_put_config))
+        // Browser-linked account (token store + hot add)
+        .route("/admin/api/accounts/link", post(admin::admin_link_account))
         // Request logs
         .route("/admin/api/logs", get(admin::admin_logs))
         // Runtime logs

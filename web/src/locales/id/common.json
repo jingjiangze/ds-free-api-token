@@ -98,9 +98,30 @@
       "countLabel": "{{count}} Akun",
       "accountNumber": "Akun #{{num}}",
       "description": "Daftar akun DeepSeek Web yang digunakan untuk reverse proxy dan rotasi token",
-      "empty": "Belum ada akun DeepSeek yang ditambahkan. Klik tombol di bawah untuk menambah akun.",
+      "empty": "Belum ada akun DeepSeek. Gunakan \u201cLogin Browser\u201d di atas, atau buka \u201cLogin akun & kata sandi\u201d di bawah.",
       "deleteLabel": "Hapus",
-      "deleteTitle": "Hapus Akun"
+      "deleteTitle": "Hapus Akun", 
+      "link": {
+        "button": "Login Browser",
+        "hint": "Disarankan: tautkan akun cukup dengan login lewat browser — tanpa kata sandi",
+        "title": "Sesi Login Browser",
+        "step1": "1. Buka halaman login DeepSeek dan masuk (terbuka di tab baru)",
+        "openLogin": "Buka halaman login DeepSeek",
+        "step2": "2. Di halaman itu tekan F12 untuk membuka konsol, tempel skrip ekstraksi lalu Enter (membaca token / sidik jari perangkat / UA browser dan menyalin ke clipboard)",
+        "copySnippet": "Salin skrip",
+        "copied": "Tersalin",
+        "step3": "3. Kembali ke halaman ini, tempel JSON hasil ekstraksi dan kirim",
+        "pastePlaceholder": "Tempel JSON yang disalin skrip di sini",
+        "emailPlaceholder": "Email / ponsel (isi manual jika deteksi otomatis gagal)",
+        "submit": "Kirim tautan",
+        "submitOk": "Terkirim. Akun sedang diverifikasi (lihat daftar di bawah)",
+        "parseFailed": "Konten yang ditempel bukan JSON yang valid",
+        "tokenMissing": "Token sesi tidak ditemukan",
+        "identityMissing": "Email/ponsel akun tidak terdeteksi — silakan isi manual"
+      },
+      "manual": {
+        "toggle": "Login akun & kata sandi (cara lama, tersembunyi)"
+      }
     },
     "apiKeys": {
       "description": "Deskripsi",

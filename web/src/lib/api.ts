@@ -349,6 +349,25 @@ export async function apiSaveConfig(config: Record<string, unknown>): Promise<{ 
   });
 }
 
+export interface LinkAccountRequest {
+  token: string;
+  device_id: string;
+  user_agent: string;
+  email: string;
+  mobile: string;
+  area_code?: string;
+}
+
+/** 浏览器登录链接：提交会话令牌并热加入账号（服务端写 linked-tokens.json） */
+export async function apiLinkAccount(
+  payload: LinkAccountRequest
+): Promise<{ ok: boolean; account: string }> {
+  return apiFetch<{ ok: boolean; account: string }>('/admin/api/accounts/link', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 // ── Logs ──────────────────────────────────────────────────────────────────
 
 export async function apiFetchLogs(limit?: number): Promise<RequestLog[]> {

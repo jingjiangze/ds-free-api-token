@@ -847,6 +847,17 @@ fn linked_token_lookup(creds: &AccountConfig) -> Option<String> {
 
 /// 回写链接令牌（best-effort；失败只记日志，不影响主流程）
 fn linked_token_store(creds: &AccountConfig, token: &str) {
+    if let Err(e) = store_linked_token(display_id_of(creds), token, "", "") {
+        log::warn!(target: "ds_core::accounts", "写入链接令牌存储失败: {e}");
+    }
+}
+
+/// 供管理接口使用：写入/更新某个账号的链接令牌（键为 email 或 mobile）
+///
+/// 存储文件与 `linked_token_lookup` 共用（默认 `linked-tokens.json`，
+/// `DSFREE_LINKED_TOKENS` 可覆盖）；`device_id` / `ua` 仅作记录，令牌本身
+/// 在账号初始化/重登时优先于密码登录使用。
+pub fn store_linked_token(key: &str, token: &str, device_id: &str, ua: &str) -> Result<(), String> {
     let path = linked_tokens_path();
     let mut v: serde_json::Value = std::fs::read_to_string(&path)
         .ok()
@@ -855,18 +866,20 @@ fn linked_token_store(creds: &AccountConfig, token: &str) {
     if !v.get("tokens").map(|t| t.is_object()).unwrap_or(false) {
         v["tokens"] = serde_json::json!({});
     }
-    let key = display_id_of(creds).to_string();
     let mut entry = v["tokens"]
-        .get(&key)
+        .get(key)
         .cloned()
         .unwrap_or_else(|| serde_json::json!({}));
     entry["token"] = serde_json::Value::String(token.to_string());
-    v["tokens"][&key] = entry;
-    if let Ok(s) = serde_json::to_string_pretty(&v) {
-        if let Err(e) = std::fs::write(&path, s) {
-            log::warn!(target: "ds_core::accounts", "写入链接令牌存储失败: {e}");
-        }
+    if !device_id.trim().is_empty() {
+        entry["device_id"] = serde_json::Value::String(device_id.trim().to_string());
     }
+    if !ua.trim().is_empty() {
+        entry["ua"] = serde_json::Value::String(ua.trim().to_string());
+    }
+    v["tokens"][key] = entry;
+    let s = serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?;
+    std::fs::write(&path, s).map_err(|e| format!("写入 {path:?} 失败: {e}"))
 }
 
 async fn try_init_account(

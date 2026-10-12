@@ -98,9 +98,30 @@
       "countLabel": "{{count}} Accounts",
       "accountNumber": "Account #{{num}}",
       "description": "List of DeepSeek Web accounts used for reverse proxy and token rotation",
-      "empty": "No DeepSeek accounts added yet. Click the button below to add an account.",
+      "empty": "No DeepSeek accounts yet. Use \u201cBrowser Login\u201d above, or expand \u201cAccount & password login\u201d below.",
       "deleteLabel": "Delete",
-      "deleteTitle": "Delete Account"
+      "deleteTitle": "Delete Account", 
+      "link": {
+        "button": "Browser Login",
+        "hint": "Recommended: link an account by logging in with your browser — no password needed",
+        "title": "Browser Login Session",
+        "step1": "1. Open the DeepSeek login page and sign in (opens in a new tab)",
+        "openLogin": "Open DeepSeek login page",
+        "step2": "2. On that page press F12 to open the console, paste the extraction snippet and hit Enter (reads token / device fingerprint / browser UA and copies to clipboard)",
+        "copySnippet": "Copy snippet",
+        "copied": "Copied",
+        "step3": "3. Come back here, paste the extracted JSON and submit",
+        "pastePlaceholder": "Paste the JSON copied by the snippet here",
+        "emailPlaceholder": "Email / mobile (fill manually if auto-detect fails)",
+        "submit": "Submit link",
+        "submitOk": "Submitted. The account is being verified (see the list below)",
+        "parseFailed": "Pasted content is not valid JSON",
+        "tokenMissing": "Session token not found",
+        "identityMissing": "Could not detect account email/mobile — please fill it manually"
+      },
+      "manual": {
+        "toggle": "Account & password login (legacy, collapsed by default)"
+      }
     },
     "apiKeys": {
       "description": "Description",

@@ -451,6 +451,110 @@ pub(crate) async fn admin_put_config(
     json_response(&serde_json::json!({"ok": true}))
 }
 
+/// 浏览器登录链接请求体
+#[derive(Deserialize)]
+pub struct LinkAccountRequest {
+    #[serde(default)]
+    pub token: String,
+    #[serde(default)]
+    pub device_id: String,
+    #[serde(default)]
+    pub user_agent: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub mobile: String,
+    #[serde(default)]
+    pub area_code: String,
+}
+
+/// POST /admin/api/accounts/link —— 浏览器登录链接
+///
+/// 把浏览器会话抓取到的 user token 写入链接令牌存储（`linked-tokens.json`），
+/// 并把账号（email/mobile + device_id，密码留空）合并进配置后热重载账号池。
+/// 池初始化/重登时命中链接令牌会跳过密码登录；账号有效性由池的健康检查给出
+/// （状态见 /admin/api/status）。
+pub(crate) async fn admin_link_account(
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> Response {
+    let req: LinkAccountRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => return error_response(StatusCode::BAD_REQUEST, &format!("JSON 解析失败: {e}")),
+    };
+    let token = req.token.trim().to_string();
+    let email = req.email.trim().to_string();
+    let mobile = req.mobile.trim().to_string();
+    if token.is_empty() {
+        return error_response(StatusCode::BAD_REQUEST, "token 不能为空");
+    }
+    if email.is_empty() && mobile.is_empty() {
+        return error_response(StatusCode::BAD_REQUEST, "email 与 mobile 至少提供一个");
+    }
+    let key = if email.is_empty() {
+        mobile.clone()
+    } else {
+        email.clone()
+    };
+
+    // 1) 写入链接令牌存储（先于账号热重载，init 时即可命中）
+    if let Err(e) = ds_core::store_linked_token(&key, &token, &req.device_id, &req.user_agent) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("写入链接令牌失败: {e}"),
+        );
+    }
+
+    // 2) 合并账号进配置（保持既有账号与其字段不变）
+    let mut new_config = { state.config.read().await.clone() };
+    let matched = new_config.ds_core.accounts.iter_mut().find(|a| {
+        let k = if a.email.is_empty() {
+            a.mobile.as_str()
+        } else {
+            a.email.as_str()
+        };
+        k == key
+    });
+    match matched {
+        Some(a) => {
+            if !req.device_id.trim().is_empty() {
+                a.device_id = req.device_id.trim().to_string();
+            }
+        }
+        None => {
+            new_config.ds_core.accounts.push(crate::config::Account {
+                email: email.clone(),
+                mobile: mobile.clone(),
+                area_code: req.area_code.trim().to_string(),
+                password: String::new(),
+                device_id: req.device_id.trim().to_string(),
+            });
+        }
+    }
+    if let Err(e) = new_config.validate() {
+        return error_response(StatusCode::BAD_REQUEST, &e.to_string());
+    }
+    {
+        let mut guard = state.config.write().await;
+        *guard = new_config.clone();
+        if let Err(e) = guard.save(&state.config_path) {
+            return error_response(StatusCode::INTERNAL_SERVER_ERROR, &format!("保存失败: {e}"));
+        }
+    }
+
+    // 3) 热重载账号池（命中链接令牌 → 跳过密码登录）
+    state
+        .adapter
+        .sync_accounts(&new_config.ds_core.accounts)
+        .await;
+    log::info!(
+        target: "http::server",
+        "浏览器链接账号已提交: {key}（device_id 提供: {}）",
+        !req.device_id.trim().is_empty()
+    );
+    json_response(&serde_json::json!({"ok": true, "account": key}))
+}
+
 #[derive(Deserialize)]
 pub struct LogsQuery {
     #[serde(default = "default_limit")]

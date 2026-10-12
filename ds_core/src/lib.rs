@@ -8,6 +8,7 @@ mod config;
 
 pub use accounts::PoolError;
 pub use accounts::pool::AccountStatus;
+pub use accounts::pool::store_linked_token;
 pub use accounts::{
     ChatSessionInfo, ClientIdentity, DsClient, EmulationProfile, FetchSessionsData, HifConfig,
     LoginPayload,

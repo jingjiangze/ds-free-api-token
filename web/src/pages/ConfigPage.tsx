@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { apiFetchConfig, apiSaveConfig, localizeAuthError, type FullConfig } from '@/lib/api';
+import { apiFetchConfig, apiSaveConfig, apiLinkAccount, localizeAuthError, type FullConfig } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Sliders,
+  Link2,
+  ChevronRight,
+  ChevronDown,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +36,14 @@ function generateApiKey(): string {
   return 'sk-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * 浏览器登录「提取脚本」：在已登录 chat.deepseek.com 的页面控制台里执行。
+ * 自动读取 userToken / 设备指纹（SMSdk）/ 浏览器 UA / 当前账号信息，
+ * JSON 复制到剪贴板（失败则打印在控制台）。
+ */
+const LINK_SNIPPET =
+  "(async()=>{const t=localStorage.getItem('userToken');let d=null;for(let i=0;i<40&&!d;i++){try{d=SMSdk.getDeviceId()}catch(e){}if(!d)await new Promise(r=>setTimeout(r,500))}let u={};try{u=await(await fetch('/api/v0/users/current',{headers:{authorization:'Bearer '+t}})).json()}catch(e){}const j=JSON.stringify({token:t,device_id:d,user_agent:navigator.userAgent,user:u});try{await navigator.clipboard.writeText(j)}catch(e){}console.log('DS-LINK JSON:',j)})()";
+
 export function ConfigPage() {
   const { t, i18n } = useTranslation();
   const [config, setConfig] = useState<FullConfig | null>(null);
@@ -40,6 +53,12 @@ export function ConfigPage() {
   const [revealedKeys, setRevealedKeys] = useState<Record<number, boolean>>({});
   const [revealedPasswords, setRevealedPasswords] = useState<Record<number, boolean>>({});
   const [copiedKeyIdx, setCopiedKeyIdx] = useState<number | null>(null);
+  const [showLinkPanel, setShowLinkPanel] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [linkPaste, setLinkPaste] = useState('');
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [snippetCopied, setSnippetCopied] = useState(false);
 
   useEffect(() => {
     apiFetchConfig()
@@ -162,6 +181,62 @@ export function ConfigPage() {
     setTimeout(() => setCopiedKeyIdx(null), 2000);
   };
 
+  /** 浏览器登录：解析粘贴的提取结果 → 提交链接 */
+  const handleLinkSubmit = async () => {
+    setMessage(null);
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(linkPaste) as Record<string, unknown>;
+    } catch {
+      setMessage({ type: 'err', text: t('config.accounts.link.parseFailed') });
+      return;
+    }
+    const findStr = (obj: unknown, keys: string[]): string => {
+      if (!obj || typeof obj !== 'object') return '';
+      for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+        if (keys.includes(k.toLowerCase()) && typeof v === 'string' && v.trim()) return v.trim();
+        const hit = findStr(v, keys);
+        if (hit) return hit;
+      }
+      return '';
+    };
+    const user = parsed.user ?? parsed;
+    const token =
+      typeof parsed.token === 'string'
+        ? parsed.token
+        : typeof parsed.user_token === 'string'
+          ? parsed.user_token
+          : '';
+    const deviceId = typeof parsed.device_id === 'string' ? parsed.device_id : '';
+    const ua = typeof parsed.user_agent === 'string' ? parsed.user_agent : '';
+    const email = linkEmail.trim() || findStr(user, ['email']);
+    const mobile = findStr(user, ['mobile_number', 'mobile', 'phone']);
+    if (!token) {
+      setMessage({ type: 'err', text: t('config.accounts.link.tokenMissing') });
+      return;
+    }
+    if (!email && !mobile) {
+      setMessage({ type: 'err', text: t('config.accounts.link.identityMissing') });
+      return;
+    }
+    setLinking(true);
+    try {
+      await apiLinkAccount({ token, device_id: deviceId, user_agent: ua, email, mobile });
+      setMessage({ type: 'ok', text: t('config.accounts.link.submitOk') });
+      setLinkPaste('');
+      setLinkEmail('');
+      setShowLinkPanel(false);
+      const fresh = await apiFetchConfig();
+      setConfig(fresh);
+      setInitialConfig(JSON.stringify(fresh));
+    } catch (e: unknown) {
+      const rawMsg = e instanceof Error ? e.message : String(e);
+      setMessage({ type: 'err', text: localizeAuthError(rawMsg, i18n.language) || rawMsg });
+    } finally {
+      setLinking(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl pb-24 sm:pb-28 relative">
       {/* Page Header */}
@@ -233,6 +308,89 @@ export function ConfigPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pt-2">
+          {/* ── 浏览器登录（推荐）────────────────────────────── */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <Button
+              size="sm"
+              className="gap-1.5 text-xs w-fit"
+              onClick={() => setShowLinkPanel((v) => !v)}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              <span>{t('config.accounts.link.button')}</span>
+            </Button>
+            <span className="text-[11px] text-muted-foreground">{t('config.accounts.link.hint')}</span>
+          </div>
+
+          {showLinkPanel && (
+            <div className="rounded-xl border bg-muted/20 p-3.5 space-y-3 text-xs">
+              <div className="font-semibold flex items-center gap-1.5">
+                <Link2 className="h-3.5 w-3.5 text-primary" />
+                <span>{t('config.accounts.link.title')}</span>
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-muted-foreground">{t('config.accounts.link.step1')}</div>
+                <a
+                  href="https://chat.deepseek.com/sign_in"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary underline underline-offset-2"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  <span>{t('config.accounts.link.openLogin')}</span>
+                </a>
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-muted-foreground">{t('config.accounts.link.step2')}</div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 text-[11px]"
+                  onClick={() => {
+                    navigator.clipboard.writeText(LINK_SNIPPET);
+                    setSnippetCopied(true);
+                    setTimeout(() => setSnippetCopied(false), 2000);
+                  }}
+                >
+                  {snippetCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  <span>
+                    {snippetCopied
+                      ? t('config.accounts.link.copied')
+                      : t('config.accounts.link.copySnippet')}
+                  </span>
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <div className="text-muted-foreground">{t('config.accounts.link.step3')}</div>
+                <textarea
+                  value={linkPaste}
+                  onChange={(e) => setLinkPaste(e.target.value)}
+                  placeholder={t('config.accounts.link.pastePlaceholder')}
+                  rows={3}
+                  className="w-full rounded-lg border bg-background px-2.5 py-2 text-[11px] font-mono resize-y outline-none focus:ring-1 focus:ring-ring"
+                />
+                <Input
+                  value={linkEmail}
+                  onChange={(e) => setLinkEmail(e.target.value)}
+                  placeholder={t('config.accounts.link.emailPlaceholder')}
+                  className="text-xs font-mono h-8"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 gap-1.5 text-[11px]"
+                  disabled={linking || !linkPaste.trim()}
+                  onClick={handleLinkSubmit}
+                >
+                  {linking ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Link2 className="h-3 w-3" />
+                  )}
+                  <span>{t('config.accounts.link.submit')}</span>
+                </Button>
+              </div>
+            </div>
+          )}
+
           {config.ds_core.accounts.length === 0 ? (
             <div className="text-center py-6 border border-dashed rounded-xl text-xs text-muted-foreground">
               {t('config.accounts.empty')}
@@ -386,20 +544,37 @@ export function ConfigPage() {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              update(['ds_core', 'accounts'], [
-                ...config.ds_core.accounts,
-                { email: '', mobile: '', area_code: '', password: '', device_id: '' },
-              ])
-            }
-            className="gap-1.5 text-xs mt-2"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>{t('config.accounts.add')}</span>
-          </Button>
+          {/* ── 账号密码登录（折叠，默认收起）────────────────── */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setShowManualForm((v) => !v)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showManualForm ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
+              <span>{t('config.accounts.manual.toggle')}</span>
+            </button>
+            {showManualForm && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  update(['ds_core', 'accounts'], [
+                    ...config.ds_core.accounts,
+                    { email: '', mobile: '', area_code: '', password: '', device_id: '' },
+                  ])
+                }
+                className="gap-1.5 text-xs mt-2"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{t('config.accounts.add')}</span>
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
