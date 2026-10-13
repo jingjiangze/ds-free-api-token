@@ -1,18 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import {
-  apiFetchConfig,
-  apiSaveConfig,
-  apiLinkAccount,
-  apiQrStart,
-  apiQrPoll,
-  apiQrCancel,
-  getToken,
-  localizeAuthError,
-  type FullConfig,
-  type QrStatus,
-} from '@/lib/api';
-import { buildCaptureBookmarklet } from '@/lib/ds-bookmarklet';
+import { apiFetchConfig, apiSaveConfig, apiLinkAccount, getToken, localizeAuthError, type FullConfig } from '@/lib/api';
+import { buildCaptureBookmarklet, buildBookmarksHtml } from '@/lib/ds-bookmarklet';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,8 +26,7 @@ import {
   ChevronDown,
   ExternalLink,
   Loader2,
-  QrCode,
-  RefreshCw,
+  Download,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from 'react-i18next';
@@ -65,109 +53,24 @@ export function ConfigPage() {
   const [linkEmail, setLinkEmail] = useState('');
   const [linking, setLinking] = useState(false);
   const [bookmarkCopied, setBookmarkCopied] = useState(false);
+  const [bookmarkFileSaved, setBookmarkFileSaved] = useState(false);
 
-  // ── 微信扫码状态（方案 2：免书签 / 免 F12）────────────────────────────
-  const [qrId, setQrId] = useState<string | null>(null);
-  const [qrPng, setQrPng] = useState<string | null>(null);
-  const [qrStarting, setQrStarting] = useState(false);
-  const [qrStatus, setQrStatus] = useState<QrStatus | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const qrTimer = useRef<number | null>(null);
-  const qrStopped = useRef(false);
-
-  /** 停止轮询（切换/卸载/取消时调用） */
-  const stopQrPolling = useCallback(() => {
-    qrStopped.current = true;
-    if (qrTimer.current !== null) {
-      window.clearTimeout(qrTimer.current);
-      qrTimer.current = null;
-    }
+  /** 下载可直接导入的书签文件（Netscape 格式），免去拖拽 */
+  const downloadBookmarkFile = useCallback(() => {
+    const html = buildBookmarksHtml(location.origin + '/ds-capture');
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ds-capture-bookmark.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // 立刻释放会让部分浏览器下载中断，延后回收
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setBookmarkFileSaved(true);
+    window.setTimeout(() => setBookmarkFileSaved(false), 2000);
   }, []);
-
-  /** 开始一次扫码会话并启动轮询 */
-  const startQr = useCallback(async () => {
-    stopQrPolling();
-    setQrError(null);
-    setQrStatus(null);
-    setQrPng(null);
-    setQrId(null);
-    setQrStarting(true);
-    try {
-      const r = await apiQrStart();
-      setQrId(r.id);
-      setQrPng(r.png_base64);
-      setQrStatus('waiting');
-      qrStopped.current = false;
-
-      // 轮询：每 2s 一次，直到 done / failed / expired 或组件卸载
-      const tick = async () => {
-        if (qrStopped.current) return;
-        try {
-          const p = await apiQrPoll(r.id);
-          if (qrStopped.current) return;
-          setQrStatus(p.status);
-          if (p.status === 'done') {
-            stopQrPolling();
-            setQrId(null);
-            setQrPng(null);
-            setMessage({ type: 'ok', text: t('config.accounts.link.qrSuccess') });
-            // 刷新配置以显示新账号
-            apiFetchConfig().then(setConfig).catch(() => {});
-            return;
-          }
-          if (p.status === 'failed') {
-            stopQrPolling();
-            // 未绑定微信是已知的服务端策略断点，给专门提示
-            setQrError(
-              p.message && p.message.includes('未绑定')
-                ? t('config.accounts.link.qrNotBound')
-                : `${t('config.accounts.link.qrFailed')}：${p.message ?? ''}`
-            );
-            return;
-          }
-          if (p.status === 'expired') {
-            stopQrPolling();
-            return;
-          }
-        } catch (e) {
-          if (qrStopped.current) return;
-          stopQrPolling();
-          setQrError(
-            `${t('config.accounts.link.qrFailed')}：${e instanceof Error ? e.message : String(e)}`
-          );
-          return;
-        }
-        if (!qrStopped.current) {
-          qrTimer.current = window.setTimeout(tick, 2000);
-        }
-      };
-      qrTimer.current = window.setTimeout(tick, 2000);
-    } catch (e) {
-      setQrError(
-        `${t('config.accounts.link.qrFailed')}：${e instanceof Error ? e.message : String(e)}`
-      );
-    } finally {
-      setQrStarting(false);
-    }
-  }, [stopQrPolling, t]);
-
-  /** 取消扫码会话 */
-  const cancelQr = useCallback(async () => {
-    stopQrPolling();
-    if (qrId) {
-      try {
-        await apiQrCancel(qrId);
-      } catch {
-        /* 取消失败不影响 UI 复位 */
-      }
-    }
-    setQrId(null);
-    setQrPng(null);
-    setQrStatus(null);
-  }, [qrId, stopQrPolling]);
-
-  // 卸载时清理定时器
-  useEffect(() => () => stopQrPolling(), [stopQrPolling]);
 
   useEffect(() => {
     apiFetchConfig()
@@ -456,105 +359,7 @@ export function ConfigPage() {
                 <span>{t('config.accounts.link.title')}</span>
               </div>
 
-              {/* ① 微信扫码授权（推荐，真正的零安装）──────────────────── */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium flex items-center gap-1.5">
-                    <QrCode className="h-3.5 w-3.5 text-primary" />
-                    <span>{t('config.accounts.link.qrTitle')}</span>
-                  </div>
-                  {!qrId && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="h-7 gap-1.5 text-[11px]"
-                      disabled={qrStarting}
-                      onClick={startQr}
-                    >
-                      {qrStarting ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <QrCode className="h-3 w-3" />
-                      )}
-                      <span>
-                        {qrStarting
-                          ? t('config.accounts.link.qrGenerating')
-                          : t('config.accounts.link.qrGenerate')}
-                      </span>
-                    </Button>
-                  )}
-                  {qrId && (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 gap-1.5 text-[11px]"
-                        onClick={startQr}
-                      >
-                        <RefreshCw className="h-3 w-3" />
-                        <span>{t('config.accounts.link.qrRefresh')}</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 gap-1.5 text-[11px]"
-                        onClick={cancelQr}
-                      >
-                        <span>{t('config.accounts.link.qrCancel')}</span>
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {!qrId && (
-                  <div className="text-[11px] text-muted-foreground leading-relaxed">
-                    {t('config.accounts.link.qrHint')}
-                  </div>
-                )}
-
-                {qrId && qrPng && (
-                  <div className="space-y-2">
-                    <div className="flex flex-col items-center gap-2 rounded-lg border bg-background p-3">
-                      <img
-                        src={`data:image/png;base64,${qrPng}`}
-                        alt="WeChat QR"
-                        className="h-40 w-40 rounded"
-                      />
-                      <div className="text-[11px] text-center text-muted-foreground">
-                        {qrStatus === 'scanned'
-                          ? t('config.accounts.link.qrScanned')
-                          : qrStatus === 'expired'
-                            ? t('config.accounts.link.qrExpired')
-                            : t('config.accounts.link.qrWaiting')}
-                      </div>
-                      {qrStatus === 'expired' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1.5 text-[11px]"
-                          onClick={startQr}
-                        >
-                          <RefreshCw className="h-3 w-3" />
-                          <span>{t('config.accounts.link.qrRefresh')}</span>
-                        </Button>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground leading-relaxed">
-                      {t('config.accounts.link.qrScanHint')}
-                    </div>
-                  </div>
-                )}
-
-                {qrError && (
-                  <div className="rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-2 text-[11px] text-destructive">
-                    {qrError}
-                  </div>
-                )}
-              </div>
-
-              <div className="border-t pt-2.5" />
-
-              {/* ② 打开 DeepSeek 登录 + 书签（扫码不可用时的路径）*/}
+              {/* ① 打开 DeepSeek 登录页（先登录，才有会话可抓）*/}
               <div className="space-y-1.5">
                 <div className="text-muted-foreground">{t('config.accounts.link.step1')}</div>
                 <a
@@ -568,10 +373,84 @@ export function ConfigPage() {
                 </a>
               </div>
 
-              {/* ② 书签一次点击（免 F12）——直接在面板里给出可拖拽书签 */}
-              <div className="space-y-1.5">
-                <div className="text-muted-foreground">{t('config.accounts.link.step2')}</div>
-                <div className="flex flex-wrap items-center gap-2">
+              {/* ② 安装抓取书签：三种方式，都不强制拖拽
+                     （同源策略决定了 JS 必须跑在 DeepSeek 源内，所以「只用跳转」
+                      不可能；这里把唯一的必需动作「拖拽」换成可复制的粘贴）*/}
+              <div className="space-y-2">
+                <div className="text-muted-foreground">{t('config.accounts.link.installTitle')}</div>
+
+                {/* 方式 A：复制链接 → 书签管理器新建粘贴（推荐，三浏览器通用）*/}
+                <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
+                  <div className="font-medium">{t('config.accounts.link.methodCopyTitle')}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="h-7 gap-1.5 text-[11px]"
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          buildCaptureBookmarklet(location.origin + '/ds-capture')
+                        );
+                        setBookmarkCopied(true);
+                        setTimeout(() => setBookmarkCopied(false), 2000);
+                      }}
+                    >
+                      {bookmarkCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      <span>
+                        {bookmarkCopied
+                          ? t('config.accounts.link.bookmarkCopied')
+                          : t('config.accounts.link.copyBookmark')}
+                      </span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1.5 text-[11px]"
+                      onClick={() => {
+                        // 面板登录态与抓取页同源，localStorage 共享。
+                        // 键名必须与 api.ts 的 TOKEN_KEY 一致（'ds-admin-token'）——
+                        // 抓取页读的就是这个键；写错键会让抓取页误报「未检测到登录态」。
+                        try {
+                          const tk = getToken();
+                          if (tk) localStorage.setItem('ds-admin-token', tk);
+                        } catch {
+                          /* 隐私模式下写入失败不影响复制流程 */
+                        }
+                        window.open('/ds-capture', '_blank', 'noopener');
+                      }}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      <span>{t('config.accounts.link.openCapture')}</span>
+                    </Button>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                    {t('config.accounts.link.methodCopySteps')}
+                  </div>
+                </div>
+
+                {/* 方式 B：下载书签文件后导入（免拖拽的另一条路）*/}
+                <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
+                  <div className="font-medium">{t('config.accounts.link.methodImportTitle')}</div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5 text-[11px]"
+                    onClick={downloadBookmarkFile}
+                  >
+                    {bookmarkFileSaved ? <Check className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+                    <span>
+                      {bookmarkFileSaved
+                        ? t('config.accounts.link.bookmarkFileDownloaded')
+                        : t('config.accounts.link.downloadBookmarkFile')}
+                    </span>
+                  </Button>
+                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                    {t('config.accounts.link.methodImportSteps')}
+                  </div>
+                </div>
+
+                {/* 方式 C：拖拽（保留，书签栏可见时最快）*/}
+                <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
+                  <div className="font-medium">{t('config.accounts.link.methodDragTitle')}</div>
                   <a
                     href={buildCaptureBookmarklet(location.origin + '/ds-capture')}
                     onClick={(e) => e.preventDefault()}
@@ -582,56 +461,19 @@ export function ConfigPage() {
                     <Link2 className="h-3 w-3" />
                     <span>{t('config.accounts.link.dragBookmark')}</span>
                   </a>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 gap-1.5 text-[11px]"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        buildCaptureBookmarklet(location.origin + '/ds-capture')
-                      );
-                      setBookmarkCopied(true);
-                      setTimeout(() => setBookmarkCopied(false), 2000);
-                    }}
-                  >
-                    {bookmarkCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    <span>
-                      {bookmarkCopied
-                        ? t('config.accounts.link.bookmarkCopied')
-                        : t('config.accounts.link.copyBookmark')}
-                    </span>
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1.5 text-[11px]"
-                    onClick={() => {
-                      // 面板登录态与抓取页同源，localStorage 共享。
-                      // 键名必须与 api.ts 的 TOKEN_KEY 一致（'ds-admin-token'）——
-                      // 抓取页读的就是这个键；写错键会让抓取页误报「未检测到登录态」。
-                      try {
-                        const tk = getToken();
-                        if (tk) localStorage.setItem('ds-admin-token', tk);
-                      } catch {
-                        /* 隐私模式下写入失败不影响复制流程 */
-                      }
-                      window.open('/ds-capture', '_blank', 'noopener');
-                    }}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    <span>{t('config.accounts.link.openCapture')}</span>
-                  </Button>
+                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                    {t('config.accounts.link.methodDragSteps')}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                    {t('config.accounts.link.showBookmarksBarHint')}
+                  </div>
                 </div>
+
                 <div className="text-[11px] text-muted-foreground leading-relaxed">
-                  {t('config.accounts.link.step2Hint')}
-                </div>
-                <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                  {t('config.accounts.link.dragGuide')}
-                </div>
-                <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                  {t('config.accounts.link.step2Alt')}
+                  {t('config.accounts.link.step2Use')}
                 </div>
               </div>
+
 
               {/* ③ 仍保留手工粘贴兜底（抓取页 JSON 复制回面板） */}
               <div className="space-y-1.5">

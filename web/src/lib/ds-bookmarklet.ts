@@ -51,3 +51,38 @@ export function buildCaptureBookmarklet(returnUrl: string): string {
   ];
   return 'javascript:' + encodeURIComponent(lines.join('\n'));
 }
+
+/** 抓取书签在书签栏/书签管理器里显示的名字 */
+export const CAPTURE_BOOKMARK_NAME = '抓取 DS 会话';
+
+/**
+ * 生成可直接导入的 Netscape 书签文件（`bookmarks.html`）内容
+ *
+ * 为什么需要它：浏览器没有任何「网页一键写书签」的 API，地址栏粘贴
+ * `javascript:` 也会被 Chrome/Edge 剥离，因此「拖拽」曾是无法绕开的动作。
+ * 但书签**导入**是浏览器原生功能——让用户下载一个文件再导入，就能完全
+ * 避开拖拽。
+ *
+ * 注意：Firefox 已确认导入时保留 `javascript:` 书签；Chrome/Edge 的导入器
+ * 只过滤 `about:` 等内部方案，未见剥离 `javascript:` 的实现，但仍建议在
+ * 面板上同时保留「复制链接 + 书签管理器粘贴」这条 100% 可靠的路径兜底。
+ */
+export function buildBookmarksHtml(returnUrl: string): string {
+  const href = buildCaptureBookmarklet(returnUrl)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const addDate = Math.floor(Date.now() / 1000);
+  return `<!DOCTYPE NETSCAPE-Bookmark-file-1>
+<!-- This is an automatically generated file.
+     It will be read and overwritten.
+     DO NOT EDIT! -->
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+<TITLE>Bookmarks</TITLE>
+<H1>Bookmarks</H1>
+<DL><p>
+    <DT><A HREF="${href}" ADD_DATE="${addDate}">${CAPTURE_BOOKMARK_NAME}</A>
+</DL><p>
+`;
+}
