@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { apiFetchConfig, apiSaveConfig, apiLinkAccount, getToken, localizeAuthError, type FullConfig } from '@/lib/api';
-import { buildCaptureBookmarklet, buildBookmarksHtml, unwrapUserToken } from '@/lib/ds-bookmarklet';
+import { buildCaptureBookmarklet, unwrapUserToken } from '@/lib/ds-bookmarklet';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,6 @@ import {
   ChevronDown,
   ExternalLink,
   Loader2,
-  Download,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTranslation } from 'react-i18next';
@@ -53,24 +52,6 @@ export function ConfigPage() {
   const [linkEmail, setLinkEmail] = useState('');
   const [linking, setLinking] = useState(false);
   const [bookmarkCopied, setBookmarkCopied] = useState(false);
-  const [bookmarkFileSaved, setBookmarkFileSaved] = useState(false);
-
-  /** 下载可直接导入的书签文件（Netscape 格式），免去拖拽 */
-  const downloadBookmarkFile = useCallback(() => {
-    const html = buildBookmarksHtml(location.origin + '/ds-capture');
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ds-capture-bookmark.html';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // 立刻释放会让部分浏览器下载中断，延后回收
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    setBookmarkFileSaved(true);
-    window.setTimeout(() => setBookmarkFileSaved(false), 2000);
-  }, []);
 
   useEffect(() => {
     apiFetchConfig()
@@ -377,13 +358,13 @@ export function ConfigPage() {
                 </a>
               </div>
 
-              {/* ② 安装抓取书签：三种方式，都不强制拖拽
+              {/* ② 安装抓取书签：复制链接 → 书签管理器新建粘贴
                      （同源策略决定了 JS 必须跑在 DeepSeek 源内，所以「只用跳转」
-                      不可能；这里把唯一的必需动作「拖拽」换成可复制的粘贴）*/}
+                      不可能；把链接复制出来由用户贴进书签管理器，是唯一不需要
+                      拖拽、也不需要 F12 的通用装法）*/}
               <div className="space-y-2">
                 <div className="text-muted-foreground">{t('config.accounts.link.installTitle')}</div>
 
-                {/* 方式 A：复制链接 → 书签管理器新建粘贴（推荐，三浏览器通用）*/}
                 <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
                   <div className="font-medium">{t('config.accounts.link.methodCopyTitle')}</div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -431,55 +412,13 @@ export function ConfigPage() {
                   </div>
                 </div>
 
-                {/* 方式 B：下载书签文件后导入（免拖拽的另一条路）*/}
-                <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
-                  <div className="font-medium">{t('config.accounts.link.methodImportTitle')}</div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 gap-1.5 text-[11px]"
-                    onClick={downloadBookmarkFile}
-                  >
-                    {bookmarkFileSaved ? <Check className="h-3 w-3" /> : <Download className="h-3 w-3" />}
-                    <span>
-                      {bookmarkFileSaved
-                        ? t('config.accounts.link.bookmarkFileDownloaded')
-                        : t('config.accounts.link.downloadBookmarkFile')}
-                    </span>
-                  </Button>
-                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                    {t('config.accounts.link.methodImportSteps')}
-                  </div>
-                </div>
-
-                {/* 方式 C：拖拽（保留，书签栏可见时最快）*/}
-                <div className="space-y-1.5 rounded-lg border bg-background/60 p-2.5">
-                  <div className="font-medium">{t('config.accounts.link.methodDragTitle')}</div>
-                  <a
-                    href={buildCaptureBookmarklet(location.origin + '/ds-capture')}
-                    onClick={(e) => e.preventDefault()}
-                    draggable
-                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground cursor-grab active:cursor-grabbing no-underline"
-                    title={t('config.accounts.link.dragHint')}
-                  >
-                    <Link2 className="h-3 w-3" />
-                    <span>{t('config.accounts.link.dragBookmark')}</span>
-                  </a>
-                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                    {t('config.accounts.link.methodDragSteps')}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground/80 leading-relaxed">
-                    {t('config.accounts.link.showBookmarksBarHint')}
-                  </div>
-                </div>
-
                 <div className="text-[11px] text-muted-foreground leading-relaxed">
                   {t('config.accounts.link.step2Use')}
                 </div>
               </div>
 
 
-              {/* ③ 仍保留手工粘贴兜底（抓取页 JSON 复制回面板） */}
+              {/* ③ 抓取页 JSON 复制回面板手工提交（自动授权失败时用） */}
               <div className="space-y-1.5">
                 <div className="text-muted-foreground">{t('config.accounts.link.step3')}</div>
                 <textarea

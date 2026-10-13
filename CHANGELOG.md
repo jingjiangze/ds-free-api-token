@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.10] - 2026-10-13
+
+### Changed
+- **面板只保留一种装书签方式**：原先「安装抓取书签」给了三种方式（复制链接 / 下载书签文件后导入 / 拖到书签栏），实际只有第一种是各浏览器都确定可用的，另外两种要么依赖下载再导入的多步操作，要么依赖用户看得见书签栏。现在面板只留「复制链接 → 书签管理器新建粘贴」，步骤说明也相应简化。
+- 去掉「兜底」等字样：抓取页 JSON 复制回面板的粘贴框此前被标成「③（兜底，通常不需要）」，现改为中性的「③ 若自动授权未生效……」，不再暗示这是一条备用/次要路径。
+
+### Removed
+- 删除「下载书签文件」按钮及其 Netscape 书签文件生成逻辑（`buildBookmarksHtml` / `CAPTURE_BOOKMARK_NAME`）。
+- 删除可拖拽的书签按钮卡片，以及关联的文案键（`methodImportTitle` / `methodImportSteps` / `downloadBookmarkFile` / `bookmarkFileDownloaded` / `methodDragTitle` / `methodDragSteps` / `showBookmarksBarHint` / `dragBookmark` / `dragHint`）与一批早已无引用的旧键（`step2` / `step2Hint` / `step2Alt` / `dragGuide` / `copyCaptureUrl` / `copied` / `identityMissing`）。每种语言从 267 键减到 251 键，三语键集仍由 `check:locales` 校验一致。
+
 ## [0.5.9] - 2026-10-13
 
 ### Fixed
