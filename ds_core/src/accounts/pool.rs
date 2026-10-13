@@ -842,6 +842,8 @@ fn linked_token_lookup(creds: &AccountConfig) -> Option<String> {
         .as_str()?
         .trim()
         .to_string();
+    // 早期版本会把网页端的 `{"value":...}` 包装串原样存进来，这里解包自愈
+    let token = normalize_user_token(&token);
     if token.is_empty() { None } else { Some(token) }
 }
 
@@ -857,7 +859,35 @@ fn linked_token_store(creds: &AccountConfig, token: &str) {
 /// 存储文件与 `linked_token_lookup` 共用（默认 `linked-tokens.json`，
 /// `DSFREE_LINKED_TOKENS` 可覆盖）；`device_id` / `ua` 仅作记录，令牌本身
 /// 在账号初始化/重登时优先于密码登录使用。
+/// 解包 DeepSeek 网页端的 `userToken` 包装
+///
+/// 网页端把令牌存在 localStorage 里时是 `{"value":"<token>","__version":"0"}`
+/// 这样的 JSON 串，而不是裸令牌。抓取脚本若把整串原样交上来，它会被当成
+/// `Authorization: Bearer {"value":...}` 发出去 —— 上游一律拒绝，表现为
+/// 「令牌无效 / 账号验证不通过」，而且用它去取账号信息也会失败（拿不到
+/// 邮箱手机号）。写入与读取两侧都调用本函数，既防新写入带壳，也能让已经
+/// 存进去的旧条目自愈。
+#[must_use]
+pub fn normalize_user_token(raw: &str) -> String {
+    let t = raw.trim();
+    if t.starts_with('{') {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(t) {
+            if let Some(inner) = v.get("value").and_then(|x| x.as_str()) {
+                let inner = inner.trim();
+                if !inner.is_empty() {
+                    return inner.to_string();
+                }
+            }
+        }
+    }
+    t.to_string()
+}
+
 pub fn store_linked_token(key: &str, token: &str, device_id: &str, ua: &str) -> Result<(), String> {
+    let token = normalize_user_token(token);
+    if token.is_empty() {
+        return Err("token 为空".to_string());
+    }
     let path = linked_tokens_path();
     let mut v: serde_json::Value = std::fs::read_to_string(&path)
         .ok()
@@ -870,7 +900,7 @@ pub fn store_linked_token(key: &str, token: &str, device_id: &str, ua: &str) -> 
         .get(key)
         .cloned()
         .unwrap_or_else(|| serde_json::json!({}));
-    entry["token"] = serde_json::Value::String(token.to_string());
+    entry["token"] = serde_json::Value::String(token);
     if !device_id.trim().is_empty() {
         entry["device_id"] = serde_json::Value::String(device_id.trim().to_string());
     }

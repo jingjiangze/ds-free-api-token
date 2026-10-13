@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.9] - 2026-10-13
+
+### Fixed
+- **链接令牌带壳导致账号用不了**：DeepSeek 网页端把 `userToken` 存在 localStorage 里时是 `{"value":"<token>","__version":"0"}` 这样的包装串，抓取脚本此前把整串原样交上来，于是它被当成 `Authorization: Bearer {"value":...}` 发出去——上游一律拒绝。连带效应是抓取脚本用同一串去取账号信息也失败，`user` 为空，邮箱/手机号拿不到，自动提交还会被「email 与 mobile 至少提供一个」挡下。现在前端（书签脚本 / 抓取页 / 面板兜底框）与服务端（`normalize_user_token`，写入与读取两侧）都会解包，已存进去的旧条目在读取时自愈。
+
+### Added
+- 服务端补取账号身份（`ds_core::identity`）：当抓取侧没带上邮箱/手机号时，由服务端用令牌调 `/users/current` 补取，顺带当作令牌有效性检查（无效令牌会立刻拿到明确错误，而不是等到健康检查才失败）。
+
+### Changed
+- 抓取脚本改从 `/users/current` 取账号信息（此前用 `/users/settings`，结构不同且更容易失败），并把 `email` / `mobile` 提到 payload 顶层，面板与抓取页都优先读顶层字段。
+- 设备指纹等待从 40×250ms 放宽到 60×250ms，降低 SMSdk 尚未就绪就放弃的概率。
+
 ## [0.5.8] - 2026-10-13
 
 ### Changed

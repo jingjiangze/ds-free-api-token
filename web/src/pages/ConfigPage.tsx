@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { apiFetchConfig, apiSaveConfig, apiLinkAccount, getToken, localizeAuthError, type FullConfig } from '@/lib/api';
-import { buildCaptureBookmarklet, buildBookmarksHtml } from '@/lib/ds-bookmarklet';
+import { buildCaptureBookmarklet, buildBookmarksHtml, unwrapUserToken } from '@/lib/ds-bookmarklet';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -225,24 +225,28 @@ export function ConfigPage() {
       return '';
     };
     const user = parsed.user ?? parsed;
-    const token =
+    const rawToken =
       typeof parsed.token === 'string'
         ? parsed.token
         : typeof parsed.user_token === 'string'
           ? parsed.user_token
           : '';
+    // 网页端的 userToken 是 {"value":"..."} 包装串，必须解包后才能当 Bearer 用
+    const token = unwrapUserToken(rawToken);
     const deviceId = typeof parsed.device_id === 'string' ? parsed.device_id : '';
     const ua = typeof parsed.user_agent === 'string' ? parsed.user_agent : '';
-    const email = linkEmail.trim() || findStr(user, ['email']);
-    const mobile = findStr(user, ['mobile_number', 'mobile', 'phone']);
+    const email =
+      linkEmail.trim() ||
+      (typeof parsed.email === 'string' ? parsed.email.trim() : '') ||
+      findStr(user, ['email']);
+    const mobile =
+      (typeof parsed.mobile === 'string' ? parsed.mobile.trim() : '') ||
+      findStr(user, ['mobile_number', 'mobile', 'phone']);
     if (!token) {
       setMessage({ type: 'err', text: t('config.accounts.link.tokenMissing') });
       return;
     }
-    if (!email && !mobile) {
-      setMessage({ type: 'err', text: t('config.accounts.link.identityMissing') });
-      return;
-    }
+    // 身份缺失不再拦下：服务端会用令牌自己补取（抓取侧那次请求可能已失败）
     setLinking(true);
     try {
       const res = await apiLinkAccount({ token, device_id: deviceId, user_agent: ua, email, mobile });

@@ -4,6 +4,7 @@
 
 mod client;
 mod hif;
+pub mod identity;
 pub(crate) mod pool;
 mod pow;
 pub mod qr;

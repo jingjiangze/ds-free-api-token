@@ -7,11 +7,12 @@ mod chat;
 mod config;
 
 pub use accounts::PoolError;
+pub use accounts::identity::{UserIdentity, fetch_user_identity};
 pub use accounts::pool::AccountStatus;
-pub use accounts::pool::store_linked_token;
+pub use accounts::pool::{normalize_user_token, store_linked_token};
 pub use accounts::qr::{
-    QrError, QrPhase, QrSession, WeChatQrClient, WECHAT_APPID, WECHAT_LONG_POLL_BASE,
-    WECHAT_OPEN_BASE,
+    QrError, QrPhase, QrSession, WECHAT_APPID, WECHAT_LONG_POLL_BASE, WECHAT_OPEN_BASE,
+    WeChatQrClient,
 };
 pub use accounts::{
     ChatSessionInfo, ClientIdentity, DsClient, EmulationProfile, FetchSessionsData, HifConfig,

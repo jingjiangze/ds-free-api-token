@@ -23,11 +23,35 @@
 
 const BT = String.fromCharCode(96); // `
 
+/**
+ * 解包 DeepSeek 网页端的 `userToken`
+ *
+ * 网页端在 localStorage 里存的是 `{"value":"<token>","__version":"0"}`，
+ * 不是裸令牌。整串当 `Authorization: Bearer` 发出去一定被拒，而且用它取账号
+ * 信息也会失败（拿不到邮箱）。抓取脚本与服务端两侧都要解包。
+ */
+export function unwrapUserToken(raw: string): string {
+  const t = (raw || '').trim();
+  if (t.startsWith('{')) {
+    try {
+      const o = JSON.parse(t) as { value?: unknown };
+      if (o && typeof o.value === 'string' && o.value.trim()) return o.value.trim();
+    } catch {
+      /* 不是 JSON 就按裸令牌处理 */
+    }
+  }
+  return t;
+}
+
 /** 生成抓取书签的 href（`javascript:...`） */
 export function buildCaptureBookmarklet(returnUrl: string): string {
   const lines = [
     '(async function(){',
-    '  var t = localStorage.getItem("userToken");',
+    '  var t = localStorage.getItem("userToken") || "";',
+    '  t = String(t).trim();',
+    '  if (t.charAt(0) === "{") {',
+    '    try { var o = JSON.parse(t); if (o && typeof o.value === "string") t = o.value.trim(); } catch(e){}',
+    '  }',
     '  if(!t){ alert("未找到会话令牌：请先在 chat.deepseek.com 完成登录"); return; }',
     '  var d = "";',
     '  var sm = window.SMSdk;',
@@ -35,17 +59,20 @@ export function buildCaptureBookmarklet(returnUrl: string): string {
     '    try { await new Promise(function(res){ sm.ready(function(){ res(); }); }); } catch(e){}',
     '  }',
     '  if (sm && sm.getDeviceId) {',
-    '    for (var i = 0; i < 40 && !d; i++) {',
+    '    for (var i = 0; i < 60 && !d; i++) {',
     '      try { d = sm.getDeviceId() || ""; } catch(e){}',
     '      if (!d) await new Promise(function(r){ setTimeout(r, 250); });',
     '    }',
     '  }',
     '  var u = {};',
     '  try{',
-    '    var r = await fetch("/api/v0/users/settings", { headers: { authorization: "Bearer " + t } });',
-    '    var j = await r.json(); u = (j && j.data) || {};',
+    '    var r = await fetch("/api/v0/users/current", { headers: { authorization: "Bearer " + t } });',
+    '    var j = await r.json();',
+    '    u = (j && j.data && j.data.biz_data && j.data.biz_data.user) || (j && j.data && j.data.user) || (j && j.data) || {};',
     '  }catch(e){}',
-    '  var payload = JSON.stringify({ token: t, device_id: d, user_agent: navigator.userAgent, user: u });',
+    '  var email = u.email || "";',
+    '  var mobile = u.mobile_number || u.mobile || "";',
+    '  var payload = JSON.stringify({ token: t, device_id: d, user_agent: navigator.userAgent, email: email, mobile: mobile, user: u });',
     '  location.href = ' + BT + returnUrl + '/#d=' + BT + ' + encodeURIComponent(payload);',
     '})();',
   ];

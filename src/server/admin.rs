@@ -482,14 +482,44 @@ pub(crate) async fn admin_link_account(
         Ok(r) => r,
         Err(e) => return error_response(StatusCode::BAD_REQUEST, &format!("JSON 解析失败: {e}")),
     };
-    let token = req.token.trim().to_string();
-    let email = req.email.trim().to_string();
-    let mobile = req.mobile.trim().to_string();
+    // 网页端把 userToken 存成 `{"value":"...","__version":"0"}`，抓取脚本可能
+    // 把整串交上来 —— 不解包的话它会被当 Bearer 发出去，上游一律拒绝。
+    let token = ds_core::normalize_user_token(&req.token);
+    let mut email = req.email.trim().to_string();
+    let mut mobile = req.mobile.trim().to_string();
     if token.is_empty() {
         return error_response(StatusCode::BAD_REQUEST, "token 不能为空");
     }
+
+    // 抓取侧没带身份时，由服务端用令牌补取一次。
+    // 常见成因：令牌带壳 → 抓取脚本自己那次 /users/current 也失败 → 拿不到邮箱。
+    // 顺带当作令牌有效性检查：无效令牌在这里就会拿到明确错误。
     if email.is_empty() && mobile.is_empty() {
-        return error_response(StatusCode::BAD_REQUEST, "email 与 mobile 至少提供一个");
+        match ds_core::fetch_user_identity(&token).await {
+            Ok(id) => {
+                email = id.email;
+                mobile = id.mobile;
+                log::info!(
+                    target: "http::server",
+                    "链接账号：抓取侧未带身份，已用令牌补取（email 提供: {}，mobile 提供: {}）",
+                    !email.is_empty(),
+                    !mobile.is_empty()
+                );
+            }
+            Err(e) => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("无法用该令牌取账号信息：{e}（令牌可能已失效，或抓取内容不完整）"),
+                );
+            }
+        }
+    }
+
+    if email.is_empty() && mobile.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "email 与 mobile 至少提供一个（且无法从令牌自动获取）",
+        );
     }
     let key = if email.is_empty() {
         mobile.clone()
